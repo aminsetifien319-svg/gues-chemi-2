@@ -1,7 +1,7 @@
 // لوحة الإدارة: قبول الطلبة، إدارة القائمة، ورفع المحتوى (الفهرس + حزم الصور) إلى Firestore.
 import {
   watchUser, signIn, signOutUser, isAdminUser, listRequests, listAllowed,
-  approve, reject, removeAllowed, addAllowed, uploadImage, uploadManifest, configMissing
+  approve, reject, removeAllowed, addAllowed, uploadImage, uploadManifest, listProgress, loadManifest, configMissing
 } from './firebase.js';
 
 const $ = (s, r) => (r || document).querySelector(s);
@@ -34,14 +34,55 @@ async function render(u) {
   } catch (err) { gate('<h1>حدث خطأ</h1><p class="err">' + esc(err && err.message ? err.message : err) + '</p>'); }
 }
 
+function summarize(json) {
+  let p = null; try { p = JSON.parse(json); } catch (e) { return null; }
+  if (!p) return null;
+  const a = p.a || {}; let ans = 0, ok = 0;
+  Object.keys(a).forEach((k) => { if (a[k] && !a[k].d && a[k].s) { ans++; if (a[k].ok) ok++; } });
+  const hist = p.hist || [];
+  const best = hist.reduce((m, h) => Math.max(m, h.n ? Math.round(100 * h.ok / h.n) : 0), 0);
+  return { read: Object.keys(p.r || {}).length, ans: ans, ok: ok, exams: hist.length, best: best, last: hist[0] };
+}
+function fmtDate(d) {
+  if (!d) return '—';
+  const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 2) return 'الآن';
+  if (mins < 60) return 'منذ ' + mins + ' د';
+  if (mins < 1440) return 'منذ ' + Math.round(mins / 60) + ' س';
+  return d.toLocaleDateString('fr-DZ');
+}
+let TOT = null;
+function progressCard(allowed, progress) {
+  const map = {}; progress.forEach((x) => { map[x.email] = x; });
+  const rows = allowed.map((st) => {
+    const x = map[st.email], s = x && summarize(x.json);
+    if (!s) return '<tr><td class="em">' + esc(st.email) + '</td><td colspan="5" class="small">لم يدخل بعد</td></tr>';
+    const pc = (a, b) => b ? Math.round(100 * a / b) : 0;
+    return '<tr><td class="em">' + esc(st.email) + '</td><td class="lat">' + fmtDate(x.at) + '</td>' +
+      '<td><span class="lat">' + s.read + (TOT ? '/' + TOT.pages : '') + '</span>' + (TOT ? '<span class="pbar"><i style="width:' + pc(s.read, TOT.pages) + '%"></i></span>' : '') + '</td>' +
+      '<td><span class="lat">' + s.ans + (TOT ? '/' + TOT.qs : '') + '</span>' + (TOT ? '<span class="pbar"><i style="width:' + pc(s.ans, TOT.qs) + '%"></i></span>' : '') + '</td>' +
+      '<td class="lat ' + (pc(s.ok, s.ans) >= 50 ? 'okc' : 'koc') + '">' + (s.ans ? pc(s.ok, s.ans) + '%' : '—') + '</td>' +
+      '<td class="lat">' + (s.exams ? s.exams + ' · ' + s.best + '%' : '—') + '</td></tr>';
+  }).join('');
+  return '<div class="card"><h2>تقدّم الطلبة <small>Progress</small></h2>' +
+    (allowed.length ? '<div class="tscroll"><table class="ptab"><thead><tr><th>الطالب</th><th>آخر نشاط</th><th>الدروس</th><th>الكيسيام</th><th>صحيح</th><th>امتحانات · أفضل</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<p class="small">لا يوجد طلبة مقبولون بعد.</p>') + '</div>';
+}
+
 async function refresh() {
-  const [req, allowed] = await Promise.all([listRequests(), listAllowed()]);
+  const [req, allowed, progress] = await Promise.all([listRequests(), listAllowed(), listProgress().catch(() => [])]);
+  if (!TOT) {
+    try {
+      const m = await loadManifest();
+      if (m) TOT = { pages: m.chapters.reduce((a, c) => a + c.sections.reduce((b, s) => b + s.pages.length, 0) + c.revision.length, 0), qs: m.chapters.reduce((a, c) => a + c.qcm.reduce((b, s) => b + s.q.length, 0), 0) };
+    } catch (e) {}
+  }
   box.innerHTML =
     '<div class="card"><h2>طلبات الوصول <small>' + req.length + ' pending</small></h2>' +
     (req.length ? '<ul class="list" id="reqs">' + req.map((r) => li(r, 'req')).join('') + '</ul>' : '<p class="small">لا توجد طلبات الآن.</p>') + '</div>' +
     '<div class="card"><h2>الطلبة المقبولون <small>' + allowed.length + ' students</small></h2>' +
     '<div class="row-form"><input class="input" id="newmail" type="email" placeholder="student@gmail.com" autocomplete="off" dir="ltr"><button type="button" class="btn pri" id="add">إضافة بريد</button></div>' +
     (allowed.length ? '<ul class="list" id="alw">' + allowed.map((r) => li(r, 'alw')).join('') + '</ul>' : '<p class="small">لا يوجد طلبة مقبولون بعد.</p>') + '</div>' +
+    progressCard(allowed, progress) +
     '<div class="card"><h2>محتوى الموقع <small>Content</small></h2>' +
     '<p class="small">اختر <b>كل</b> ملفات المحتوى معاً: <b class="lat">manifest.json</b> وملفات <b class="lat">pack-….json</b> (7 ملفات). الرفع يستغرق بضع دقائق، وإن انقطع أعد الضغط على «رفع المحتوى» من نفس المتصفح وسيكمل من حيث توقف.</p>' +
     '<div class="row-form"><input class="input" id="file" type="file" accept="application/json,.json" multiple><button type="button" class="btn pri" id="upload">رفع المحتوى</button></div>' +

@@ -89,7 +89,25 @@ export function getImage(id) {
   return p;
 }
 
+/* ---------- تقدّم الطالب (يتبعه على كل أجهزته) ---------- */
+export async function loadProgress(email) {
+  const s = await getDocFromServer(doc(db, 'progress', email));
+  return s.exists() ? s.data().json : null;
+}
+
+export async function saveProgress(email, json) {
+  await setDoc(doc(db, 'progress', email), { json: json, updatedAt: serverTimestamp() });
+}
+
 /* ---------- الإدارة ---------- */
+export async function listProgress() {
+  const s = await getDocs(collection(db, 'progress'));
+  return s.docs.map((d) => {
+    const x = d.data();
+    return { email: d.id, json: x.json || '', at: x.updatedAt && x.updatedAt.toDate ? x.updatedAt.toDate() : null };
+  });
+}
+
 export async function isAdminUser(email) {
   const s = await getDoc(doc(db, 'admins', email));
   return s.exists();

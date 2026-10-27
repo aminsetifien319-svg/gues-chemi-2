@@ -99,6 +99,23 @@ export async function saveProgress(email, json) {
   await setDoc(doc(db, 'progress', email), { json: json, updatedAt: serverTimestamp() });
 }
 
+/* ---------- الأجهزة (جهازان كحد أقصى لكل حساب) ---------- */
+export async function getDevices(email) {
+  const s = await getDocFromServer(doc(db, 'devices', email));
+  return s.exists() ? s.data() : null;
+}
+
+export async function addDevice(email, ids, info) {
+  await setDoc(doc(db, 'devices', email), { ids: ids, info: info, updatedAt: serverTimestamp() });
+}
+
+export async function listDevices() {
+  const s = await getDocs(collection(db, 'devices'));
+  return s.docs.map((d) => ({ email: d.id, ids: d.data().ids || [], info: d.data().info || {} }));
+}
+
+export async function resetDevices(email) { await deleteDoc(doc(db, 'devices', lower(email))); }
+
 /* ---------- الإدارة ---------- */
 export async function listProgress() {
   const s = await getDocs(collection(db, 'progress'));

@@ -1,7 +1,7 @@
 // لوحة الإدارة: قبول الطلبة، إدارة القائمة، ورفع المحتوى (الفهرس + حزم الصور) إلى Firestore.
 import {
   watchUser, signIn, signOutUser, isAdminUser, listRequests, listAllowed,
-  approve, reject, removeAllowed, addAllowed, uploadImage, uploadManifest, listProgress, loadManifest, configMissing
+  approve, reject, removeAllowed, addAllowed, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, configMissing
 } from './firebase.js';
 
 const $ = (s, r) => (r || document).querySelector(s);
@@ -52,24 +52,26 @@ function fmtDate(d) {
   return d.toLocaleDateString('fr-DZ');
 }
 let TOT = null;
-function progressCard(allowed, progress) {
+function progressCard(allowed, progress, devices) {
   const map = {}; progress.forEach((x) => { map[x.email] = x; });
+  const dev = {}; (devices || []).forEach((d) => { dev[d.email] = d; });
+  const dcell = (email) => { const d = dev[email]; const n = d ? d.ids.length : 0; const names = d ? d.ids.map((id) => (d.info[id] || {}).name || 'جهاز').join('، ') : ''; return '<td class="dv" title="' + esc(names) + '"><span class="lat">' + n + '/2</span>' + (n ? ' <button type="button" class="btn sm" data-a="resetdev" data-email="' + esc(email) + '" data-label="إعادة تعيين">إعادة تعيين</button>' : '') + '</td>'; };
   const rows = allowed.map((st) => {
     const x = map[st.email], s = x && summarize(x.json);
-    if (!s) return '<tr><td class="em">' + esc(st.email) + '</td><td colspan="5" class="small">لم يدخل بعد</td></tr>';
+    if (!s) return '<tr><td class="em">' + esc(st.email) + '</td><td colspan="5" class="small">لم يدخل بعد</td>' + dcell(st.email) + '</tr>';
     const pc = (a, b) => b ? Math.round(100 * a / b) : 0;
     return '<tr><td class="em">' + esc(st.email) + '</td><td class="lat">' + fmtDate(x.at) + '</td>' +
       '<td><span class="lat">' + s.read + (TOT ? '/' + TOT.pages : '') + '</span>' + (TOT ? '<span class="pbar"><i style="width:' + pc(s.read, TOT.pages) + '%"></i></span>' : '') + '</td>' +
       '<td><span class="lat">' + s.ans + (TOT ? '/' + TOT.qs : '') + '</span>' + (TOT ? '<span class="pbar"><i style="width:' + pc(s.ans, TOT.qs) + '%"></i></span>' : '') + '</td>' +
       '<td class="lat ' + (pc(s.ok, s.ans) >= 50 ? 'okc' : 'koc') + '">' + (s.ans ? pc(s.ok, s.ans) + '%' : '—') + '</td>' +
-      '<td class="lat">' + (s.exams ? s.exams + ' · ' + s.best + '%' : '—') + '</td></tr>';
+      '<td class="lat">' + (s.exams ? s.exams + ' · ' + s.best + '%' : '—') + '</td>' + dcell(st.email) + '</tr>';
   }).join('');
   return '<div class="card"><h2>تقدّم الطلبة <small>Progress</small></h2>' +
-    (allowed.length ? '<div class="tscroll"><table class="ptab"><thead><tr><th>الطالب</th><th>آخر نشاط</th><th>الدروس</th><th>الكيسيام</th><th>صحيح</th><th>امتحانات · أفضل</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<p class="small">لا يوجد طلبة مقبولون بعد.</p>') + '</div>';
+    (allowed.length ? '<div class="tscroll"><table class="ptab"><thead><tr><th>الطالب</th><th>آخر نشاط</th><th>الدروس</th><th>الكيسيام</th><th>صحيح</th><th>امتحانات · أفضل</th><th>الأجهزة</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<p class="small">لا يوجد طلبة مقبولون بعد.</p>') + '</div>';
 }
 
 async function refresh() {
-  const [req, allowed, progress] = await Promise.all([listRequests(), listAllowed(), listProgress().catch(() => [])]);
+  const [req, allowed, progress, devices] = await Promise.all([listRequests(), listAllowed(), listProgress().catch(() => []), listDevices().catch(() => [])]);
   if (!TOT) {
     try {
       const m = await loadManifest();
@@ -82,9 +84,9 @@ async function refresh() {
     '<div class="card"><h2>الطلبة المقبولون <small>' + allowed.length + ' students</small></h2>' +
     '<div class="row-form"><input class="input" id="newmail" type="email" placeholder="student@gmail.com" autocomplete="off" dir="ltr"><button type="button" class="btn pri" id="add">إضافة بريد</button></div>' +
     (allowed.length ? '<ul class="list" id="alw">' + allowed.map((r) => li(r, 'alw')).join('') + '</ul>' : '<p class="small">لا يوجد طلبة مقبولون بعد.</p>') + '</div>' +
-    progressCard(allowed, progress) +
+    progressCard(allowed, progress, devices) +
     '<div class="card"><h2>محتوى الموقع <small>Content</small></h2>' +
-    '<p class="small">اختر <b>كل</b> ملفات المحتوى معاً: <b class="lat">manifest.json</b> وملفات <b class="lat">pack-….json</b> (7 ملفات). الرفع يستغرق بضع دقائق، وإن انقطع أعد الضغط على «رفع المحتوى» من نفس المتصفح وسيكمل من حيث توقف.</p>' +
+    '<p class="small">اختر <b>كل</b> ملفات المحتوى معاً: <b class="lat">manifest.json</b> وملفات <b class="lat">pack-….json</b> (7 ملفات). ملاحظة: الصور التي رُفعت سابقاً من هذا المتصفح تُتخطّى تلقائياً. الرفع يستغرق بضع دقائق، وإن انقطع أعد الضغط على «رفع المحتوى» من نفس المتصفح وسيكمل من حيث توقف.</p>' +
     '<div class="row-form"><input class="input" id="file" type="file" accept="application/json,.json" multiple><button type="button" class="btn pri" id="upload">رفع المحتوى</button></div>' +
     '<div class="prog-up" id="up" hidden><span class="pbar"><i id="upbar" style="width:0%"></i></span><p class="small" id="uptxt"></p></div>' +
     '<p id="msg" class="' + (note.indexOf('✓') === 0 ? 'okmsg' : 'err') + '" role="status">' + esc(note) + '</p></div>';
@@ -108,7 +110,7 @@ async function upload(files) {
   // تحقق أن كل صور الفهرس موجودة في الحزم المختارة (أو مرفوعة سابقاً)
   const need = new Set();
   manifest.overview.forEach((p) => need.add(p.img));
-  manifest.chapters.forEach((c) => { need.add(c.cover); c.sections.forEach((s) => s.pages.forEach((p) => need.add(p.img))); c.revision.forEach((p) => need.add(p.img)); c.qcm.forEach((s) => s.q.forEach((q) => { need.add(q.q); need.add(q.s); })); });
+  manifest.chapters.forEach((c) => { need.add(c.cover); if (c.text) need.add(c.text); c.sections.forEach((s) => s.pages.forEach((p) => need.add(p.img))); c.revision.forEach((p) => need.add(p.img)); c.qcm.forEach((s) => s.q.forEach((q) => { need.add(q.q); need.add(q.s); })); });
   const all = new Map(); packs.forEach((p) => Object.keys(p.docs).forEach((k) => all.set(k, p.docs[k])));
   const ids = Array.from(need);
   up.hidden = false;
@@ -163,6 +165,13 @@ document.addEventListener('click', async (e) => {
       msg.className = 'okmsg'; msg.textContent = '✓ اكتمل: ' + r.ch + ' شابيطرات، ' + r.total + ' صورة (رُفع ' + r.sent + '، موجود مسبقاً ' + r.skipped + ').';
     } catch (err) { msg.className = 'err'; msg.textContent = (err && err.message) || String(err); }
     busy = false; t.disabled = false; return;
+  }
+  const rd = t.closest('[data-a="resetdev"]');
+  if (rd) {
+    if (armed !== rd) { armed = rd; rd.textContent = 'تأكيد؟'; clearTimeout(armTimer); armTimer = setTimeout(() => { rd.textContent = rd.dataset.label; armed = null; }, 4000); return; }
+    armed = null;
+    try { await resetDevices(rd.dataset.email); note = '✓ أُعيد تعيين أجهزة ' + rd.dataset.email; } catch (err) { note = err.message || String(err); }
+    await refresh(); return;
   }
   const b = t.closest('[data-a]');
   if (b) {

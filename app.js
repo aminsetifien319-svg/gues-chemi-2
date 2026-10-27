@@ -1,48 +1,56 @@
-// موقع الطلبة: دخول Google ← فحص القبول ← تحميل المحتوى من Firestore ← عرض الدروس والكيسيام.
-import { watchUser, signIn, signOutUser, getAccess, sendRequest, loadContent, configMissing } from './firebase.js';
+// Gues Chemi: دخول Google ← فحص القبول ← قراءة الفهرس من Firestore ← الدروس والكيسيام.
+import { watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage, configMissing } from './firebase.js';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const cv = (n) => '--c:var(--c' + n + ');--on:var(--on' + n + ')';
-const qid = (ch, i) => 'c' + ch.id + 'q' + (i + 1);
+const VIEW = $('#view'), GATE = $('#gate'), SIDE = $('#side');
 
-let CHAPTERS = [], STATS = null, VIEWS = [], prog = {}, KEY = '', me = null, isAdmin = false, built = false;
+let me = null, isAdmin = false, M = null, prog = null, KEY = '', ready = false;
+let FLOW = {};        // chapter id → ordered list of pages {img,n,t,sec,secAr,rev}
+let quizSel = {};     // current (unchecked) selection per question key
 
-/* ---------- التقدّم (محلي في متصفح الطالب) ---------- */
-function loadProg() { prog = {}; try { const raw = localStorage.getItem(KEY); if (raw) prog = JSON.parse(raw) || {}; } catch (e) { prog = {}; } }
-function save() { try { localStorage.setItem(KEY, JSON.stringify(prog)); } catch (e) {} }
-function counts(ch) {
-  let a = 0, ok = 0;
-  ch.qcm.forEach((q, i) => { const v = prog[qid(ch, i)]; if (v !== undefined) { a++; if (v === 1) ok++; } });
-  return { a: a, ok: ok, n: ch.qcm.length };
+/* ======================= التقدّم (محفوظ في متصفح الطالب) ======================= */
+function blank() { return { r: {}, q: {}, last: '' }; }
+function loadProg() {
+  prog = blank();
+  try { const raw = localStorage.getItem(KEY); if (raw) { const p = JSON.parse(raw); if (p && p.r && p.q) prog = p; } } catch (e) {}
 }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(prog)); } catch (e) {} }
+function chStats(ch) {
+  const pages = FLOW[ch.id], read = pages.filter((p) => prog.r[p.n]).length;
+  let qn = 0, qa = 0, qok = 0;
+  ch.qcm.forEach((set) => { const st = prog.q[setKey(ch.id, set.key)] || {}; qn += set.q.length; set.q.forEach((q) => { if (st[q.n]) { qa++; if (st[q.n].ok) qok++; } }); });
+  return { pages: pages.length, read: read, qn: qn, qa: qa, qok: qok };
+}
+const setKey = (cid, kind) => 'c' + cid + kind[0];
+const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
-/* ---------- شاشات الدخول والقبول ---------- */
-function showGate(inner) {
-  $$('.view').forEach((s) => { s.hidden = (s.id !== 'gate'); });
-  $('#gate').innerHTML = '<div class="gate"><div class="card"><p class="kick">GUES CHEMI</p>' + inner + '</div></div>';
+/* ======================= شاشات الدخول ======================= */
+function gate(inner) {
+  ready = false; VIEW.hidden = true; VIEW.innerHTML = ''; SIDE.hidden = true; $('#menuBtn').hidden = true; closeSide();
+  GATE.hidden = false;
+  GATE.innerHTML = '<div class="gate"><div class="card"><img class="gate-logo" src="logo.webp" alt="" width="96" height="96"><p class="kick">GUES CHEMI</p>' + inner + '</div></div>';
   window.scrollTo(0, 0);
 }
+const acts = (a) => '<p class="acts">' + a + '</p>';
 function gLogin(msg) {
-  if (configMissing) {
-    return showGate('<h1>الموقع غير مُهيّأ بعد</h1><p>افتح الملف <b class="lat">firebase-config.js</b> والصق إعدادات مشروع Firebase، ثم أعد رفع الموقع.</p>');
-  }
-  showGate('<h1>الكيمياء العامة</h1><p>الدروس والكيسيام متاحة للطلبة المقبولين فقط. سجّل الدخول بحساب Google.</p>' +
+  if (configMissing) return gate('<h1>الموقع غير مُهيّأ بعد</h1><p>الصق إعدادات Firebase في الملف <b class="lat">firebase-config.js</b>.</p>');
+  gate('<h1>الكيمياء العامة · السنة الأولى صيدلة</h1><p>الدروس والكيسيام متاحة للطلبة المقبولين فقط. سجّل الدخول بحساب Google.</p>' +
     (msg ? '<p class="err" role="alert">' + esc(msg) + '</p>' : '') +
-    '<p><button type="button" class="btn pri" data-act="login">الدخول بحساب Google</button></p>');
+    acts('<button type="button" class="btn pri g" data-act="login"><svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>الدخول بحساب Google</button>'));
 }
 function gRequest(u) {
-  showGate('<h1>مرحباً ' + esc((u.name || '').split(' ')[0]) + '</h1><p>حسابك <bdi class="lat">' + esc(u.email) + '</bdi> غير مقبول بعد. أرسل طلب وصول ليراجعه المشرف.</p>' +
-    '<p style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="btn pri" data-act="request">إرسال طلب الوصول</button><button type="button" class="btn" data-act="logout">خروج</button></p>');
+  gate('<h1>مرحباً ' + esc((u.name || '').split(' ')[0]) + '</h1><p>حسابك <bdi class="lat">' + esc(u.email) + '</bdi> غير مقبول بعد. أرسل طلب وصول ليراجعه المشرف.</p>' +
+    acts('<button type="button" class="btn pri" data-act="request">إرسال طلب الوصول</button><button type="button" class="btn" data-act="logout">خروج</button>'));
 }
 function gPending(u) {
-  showGate('<h1>طلبك قيد المراجعة</h1><p>أُرسل طلب الحساب <bdi class="lat">' + esc(u.email) + '</bdi>. ستتمكن من الدخول عندما يقبله المشرف.</p>' +
-    '<p style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="btn pri" data-act="recheck">تحقّق من جديد</button><button type="button" class="btn" data-act="logout">خروج</button></p>');
+  gate('<h1>طلبك قيد المراجعة</h1><p>أُرسل طلب الحساب <bdi class="lat">' + esc(u.email) + '</bdi>. ستتمكن من الدخول عندما يقبله المشرف.</p>' +
+    acts('<button type="button" class="btn pri" data-act="recheck">تحقّق من جديد</button><button type="button" class="btn" data-act="logout">خروج</button>'));
 }
 function gError(msg, extra) {
-  showGate('<h1>تعذّر الدخول</h1><p class="err" role="alert">' + esc(msg) + '</p>' + (extra || '') +
-    '<p style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="btn pri" data-act="recheck">حاول مرة أخرى</button><button type="button" class="btn" data-act="logout">خروج</button></p>');
+  gate('<h1>تعذّر الدخول</h1><p class="err" role="alert">' + esc(msg) + '</p>' + (extra || '') +
+    acts('<button type="button" class="btn pri" data-act="recheck">حاول مرة أخرى</button><button type="button" class="btn" data-act="logout">خروج</button>'));
 }
 function friendly(err) {
   const c = err && err.code;
@@ -52,298 +60,376 @@ function friendly(err) {
   return (err && err.message) ? err.message : 'حدث خطأ غير متوقع.';
 }
 
-/* ---------- المسار الرئيسي ---------- */
-async function route(u) {
-  me = u;
-  if (!u) { resetApp(); renderNav(); gLogin(); return; }
-  KEY = 'gueschemi.progress.v1:' + u.email;
-  renderNav();
-  showGate('<p>جارٍ التحقق من حسابك…</p>');
+function renderUser() {
+  const u = $('#user');
+  if (!me) { u.innerHTML = ''; return; }
+  const ini = esc((me.name || me.email).trim().charAt(0).toUpperCase());
+  u.innerHTML = (isAdmin && ready ? '<a class="chip" href="admin.html">الإدارة</a>' : '') +
+    '<span class="av" title="' + esc(me.email) + '">' + ini + '</span>' +
+    '<button type="button" class="chip" data-act="logout">خروج</button>';
+}
+
+/* ======================= المسار الرئيسي ======================= */
+async function onUser(u) {
+  me = u; isAdmin = false; M = null;
+  renderUser();
+  if (!u) { gLogin(); return; }
+  KEY = 'gueschemi.v2:' + u.email;
+  gate('<p>جارٍ التحقق من حسابك…</p>');
   try {
     const acc = await getAccess(u.email);
     if (acc === 'admin' || acc === 'allowed') {
       isAdmin = (acc === 'admin');
-      const content = await loadContent();
-      if (!content.chapters.length) {
-        renderNav();
-        return gError(isAdmin ? 'لم يُرفع المحتوى بعد. افتح صفحة الإدارة وارفع ملف content.json.' : 'المحتوى غير متاح حالياً، حاول لاحقاً.',
-          isAdmin ? '<p><a class="btn pri" style="text-decoration:none;display:inline-block" href="admin.html">صفحة الإدارة</a></p>' : '');
+      M = await loadManifest();
+      if (!M || !M.chapters || !M.chapters.length) {
+        renderUser();
+        return gError(isAdmin ? 'لم يُرفع المحتوى بعد. افتح صفحة الإدارة وارفع ملفات المحتوى.' : 'المحتوى غير متاح حالياً، حاول لاحقاً.',
+          isAdmin ? acts('<a class="btn pri" href="admin.html">صفحة الإدارة</a>') : '');
       }
-      startApp(content);
-    } else if (acc === 'pending') { gPending(u); }
-    else { gRequest(u); }
+      start();
+    } else if (acc === 'pending') gPending(u);
+    else gRequest(u);
   } catch (err) { gError(friendly(err)); }
 }
 
-function resetApp() {
-  built = false; CHAPTERS = []; STATS = null; isAdmin = false; prog = {};
-  $('#v-home').innerHTML = ''; $('#v-stats').innerHTML = '';
-  $$('.view[data-ch]').forEach((s) => s.remove());
-}
-
-/* ---------- التنقل ---------- */
-function renderNav() {
-  if (!me) { $('#nav').innerHTML = ''; return; }
-  let html = '';
-  if (built) {
-    const items = [['home', 'الرئيسية', 0], ['stats', 'الإحصائيات', 0]].concat(CHAPTERS.map((c) => ['ch' + c.id, 'CH ' + c.id, c.id]));
-    html += items.map((it) => '<button type="button" class="nv" data-go="' + it[0] + '">' + (it[2] ? '<i class="dot" style="background:var(--c' + it[2] + ')"></i>' : '') + '<span' + (it[2] ? ' class="lat"' : '') + '>' + it[1] + '</span></button>').join('');
-  }
-  if (isAdmin) html += '<a class="nv" href="admin.html">الإدارة</a>';
-  html += '<button type="button" class="nv" data-act="logout">خروج</button>';
-  $('#nav').innerHTML = html;
-  if (built) { const cur = $$('.view').filter((s) => !s.hidden)[0]; if (cur) markNav(cur.id.replace('v-', '')); }
-}
-function markNav(v) {
-  $$('.nv[data-go]').forEach((b) => { if (b.dataset.go === v) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-}
-function show(v) {
-  if (!built) return;
-  if (VIEWS.indexOf(v) < 0) v = 'home';
-  $$('.view').forEach((s) => { s.hidden = (s.id !== 'v-' + v); });
-  markNav(v);
-  try { history.replaceState(null, '', '#' + v); } catch (e) {}
-  window.scrollTo(0, 0);
-}
-
-/* ---------- الصفحة الرئيسية ---------- */
-function buildHome() {
-  const rows = CHAPTERS.map((ch) =>
-    '<button type="button" class="row" data-go="ch' + ch.id + '" style="' + cv(ch.id) + '">' +
-    '<span class="badge"><small>CH</small><b>' + ch.id + '</b></span>' +
-    '<span class="rtxt"><span class="en">' + ch.en + '</span><span class="ar">' + ch.ar + '</span><span class="tp">' + ch.topics + '</span></span>' +
-    '<span class="meta"><span class="share"><bdi>' + ch.share + '%</bdi> من أسئلة الامتحان</span><span data-prog="' + ch.id + '"></span></span></button>').join('');
-  $('#v-home').innerHTML =
-    '<div class="hero"><p class="kick">General Chemistry · 1st-year Pharmacy</p>' +
-    '<h1>الكيمياء العامة كاملة، شابيطر بشابيطر</h1>' +
-    '<p class="lead">اقرأ الدرس، ثم حلّ الكيسيام وتحقق من إجابتك مباشرة. كل شيء داخل الموقع.</p>' +
-    '<div class="overall"><span class="bar"><i data-overbar style="width:0%"></i></span><span data-over></span></div></div>' +
-    '<div class="sh"><h2>الشابيطرات</h2><small>' + CHAPTERS.length + ' chapters</small></div><div class="rows">' + rows + '</div>' +
-    '<div class="linkrow"><p>أيّ شابيطر يستحق وقتاً أكثر؟ شاهد كيف توزعت أسئلة الامتحانات خلال 7 سنوات.</p><button type="button" class="btn pri" data-go="stats">إحصائيات الامتحانات</button></div>';
-}
-
-/* ---------- الشابيطرات والكيسيام ---------- */
-function qHTML(ch, q, i) {
-  const id = qid(ch, i);
-  const nOk = q.o.filter((o) => o[1]).length;
-  const multi = nOk > 1;
-  const opts = q.o.map((o, j) =>
-    '<label class="opt"><input type="' + (multi ? 'checkbox' : 'radio') + '" name="' + id + '" value="' + j + '"><span class="lt">' + 'ABCDEF'.charAt(j) + '</span><span class="ot">' + o[0] + '</span><span class="mk"></span></label>').join('');
-  return '<article class="q" id="' + id + '" data-id="' + id + '" style="' + cv(ch.id) + '">' +
-    '<header class="qh"><span class="qn">Q' + (i + 1) + '</span><span class="qt">' + (multi ? 'عدة إجابات صحيحة: اختر كلها' : 'إجابة واحدة صحيحة') + '</span><span class="qs" data-st></span></header>' +
-    '<p class="qq">' + q.q + '</p>' +
-    '<div class="opts" role="' + (multi ? 'group' : 'radiogroup') + '" aria-label="الخيارات">' + opts + '</div>' +
-    '<div class="qa"><button type="button" class="btn pri" data-check disabled>تحقق</button><button type="button" class="btn" data-retry hidden>أعد المحاولة</button></div>' +
-    '<div class="res" aria-live="polite" hidden></div></article>';
-}
-
-function buildChapter(ch, idx) {
-  const prev = CHAPTERS[idx - 1], next = CHAPTERS[idx + 1];
-  const s = document.createElement('section');
-  s.className = 'view'; s.id = 'v-ch' + ch.id; s.hidden = true; s.setAttribute('data-ch', ch.id); s.setAttribute('style', cv(ch.id));
-  const pager = '<button type="button" class="btn pri" data-tabgo="qcm">حلّ كيسيام هذا الشابيطر</button>' +
-    (prev ? '<button type="button" class="btn" data-go="ch' + prev.id + '">الشابيطر السابق: CH ' + prev.id + '</button>' : '') +
-    (next ? '<button type="button" class="btn" data-go="ch' + next.id + '">الشابيطر التالي: CH ' + next.id + '</button>' : '');
-  s.innerHTML =
-    '<div class="chhead"><div class="bigbadge"><small>CH</small><b>' + ch.id + '</b></div>' +
-    '<div class="chtx"><h1 class="en">' + ch.en + '</h1><p class="ar" style="margin:0">' + ch.ar + '</p><span class="tp">' + ch.topics + '</span>' +
-    '<p class="chips"><span class="chip"><bdi>' + ch.share + '%</bdi> من أسئلة الامتحان</span><span class="chip">المرتبة <bdi>' + ch.rank + '</bdi> من 5</span></p></div></div>' +
-    '<div class="tabs" role="tablist"><button type="button" class="tab" role="tab" aria-selected="true" data-tab="lesson">الدرس</button>' +
-    '<button type="button" class="tab" role="tab" aria-selected="false" data-tab="qcm">كيسيام <span class="cnt">' + ch.qcm.length + '</span></button></div>' +
-    '<div class="pane" data-pane="lesson"><article class="lesson">' + ch.lesson + '</article><div class="pager">' + pager + '</div></div>' +
-    '<div class="pane" data-pane="qcm" hidden>' +
-    '<div class="qsum"><span class="sumtx" data-sum="' + ch.id + '"></span><span class="bar"><i data-sumbar="' + ch.id + '" style="width:0%"></i></span><button type="button" class="btn" data-reset="' + ch.id + '">مسح تقدّمي</button></div>' +
-    '<p class="qnote">الإجابة تُحسب صحيحة فقط إذا اخترت كل الخيارات الصحيحة ولا شيء غيرها.</p>' +
-    ch.qcm.map((q, i) => qHTML(ch, q, i)).join('') + '</div>';
-  $('#main').appendChild(s);
-}
-
-function setTab(sec, name) {
-  $$('.pane', sec).forEach((p) => { p.hidden = (p.dataset.pane !== name); });
-  $$('.tab', sec).forEach((t) => { t.setAttribute('aria-selected', t.dataset.tab === name ? 'true' : 'false'); });
-  window.scrollTo(0, 0);
-}
-
-function updateProgress() {
-  let tot = 0, okAll = 0;
-  CHAPTERS.forEach((ch) => {
-    const c = counts(ch); tot += c.n; okAll += c.ok;
-    const el = $('[data-prog="' + ch.id + '"]');
-    if (el) el.textContent = c.a ? (c.ok + ' / ' + c.n + ' صحيحة') : (c.n + ' كيسيام');
-    const sm = $('[data-sum="' + ch.id + '"]'); if (sm) sm.textContent = c.ok + ' / ' + c.n + ' صحيحة · أجبت على ' + c.a;
-    const sb = $('[data-sumbar="' + ch.id + '"]'); if (sb) sb.style.width = (c.n ? c.ok / c.n * 100 : 0) + '%';
-    ch.qcm.forEach((q, i) => {
-      const st = $('#' + qid(ch, i) + ' [data-st]');
-      const v = prog[qid(ch, i)];
-      if (st) st.textContent = v === 1 ? '✓ حللتها صحيحة' : (v === 0 ? '✗ أخطأت سابقاً' : '');
-    });
+function start() {
+  FLOW = {};
+  M.chapters.forEach((ch) => {
+    const list = [];
+    ch.sections.forEach((s) => s.pages.forEach((p) => list.push({ img: p.img, n: p.n, t: p.t, sec: s.en, secAr: s.ar, rev: false })));
+    ch.revision.forEach((p) => list.push({ img: p.img, n: p.n, t: p.t, sec: 'Revision', secAr: p.ar || 'المراجعة', rev: true }));
+    FLOW[ch.id] = list;
   });
-  const o = $('[data-over]'); if (o) o.textContent = okAll + ' / ' + tot + ' كيسيام صحيحة';
-  const ob = $('[data-overbar]'); if (ob) ob.style.width = (tot ? okAll / tot * 100 : 0) + '%';
-}
-
-function resetCard(card) {
-  $$('input', card).forEach((i) => { i.checked = false; i.disabled = false; });
-  $$('.opt', card).forEach((l) => { l.classList.remove('good', 'bad', 'miss'); $('.mk', l).textContent = ''; });
-  const r = $('.res', card); r.hidden = true; r.className = 'res'; r.innerHTML = '';
-  $('[data-check]', card).hidden = false; $('[data-check]', card).disabled = true;
-  $('[data-retry]', card).hidden = true;
-}
-
-function checkCard(card) {
-  const m = /^c(\d+)q(\d+)$/.exec(card.dataset.id);
-  const ch = CHAPTERS.filter((c) => c.id === +m[1])[0], q = ch.qcm[+m[2] - 1];
-  const sel = $$('input:checked', card).map((i) => +i.value);
-  if (!sel.length) return;
-  const nOk = q.o.filter((o) => o[1]).length;
-  const ok = sel.length === nOk && sel.every((j) => q.o[j][1] === 1);
-  $$('.opt', card).forEach((l, j) => {
-    const chosen = sel.indexOf(j) >= 0, right = q.o[j][1] === 1, mk = $('.mk', l);
-    if (chosen && right) { l.classList.add('good'); mk.textContent = '✓ صحيح'; }
-    else if (chosen && !right) { l.classList.add('bad'); mk.textContent = '✗ خطأ'; }
-    else if (!chosen && right) { l.classList.add('miss'); mk.textContent = 'كان صحيحاً'; }
-    $('input', l).disabled = true;
-  });
-  const r = $('.res', card);
-  r.hidden = false; r.className = 'res ' + (ok ? 'ok' : 'ko');
-  r.innerHTML = '<strong>' + (ok ? 'إجابة صحيحة' : 'إجابة غير صحيحة') + '</strong><span>' + q.why + '</span>';
-  $('[data-check]', card).hidden = true; $('[data-retry]', card).hidden = false;
-  prog[card.dataset.id] = ok ? 1 : 0; save(); updateProgress();
-}
-
-/* ---------- الإحصائيات ---------- */
-function donut() {
-  const C = 2 * Math.PI * 70, tot = CHAPTERS.reduce((s, c) => s + c.app, 0);
-  let off = 0;
-  const segs = CHAPTERS.map((ch) => {
-    const len = ch.app / tot * C;
-    const s = '<circle cx="100" cy="100" r="70" fill="none" stroke-width="30" style="stroke:var(--c' + ch.id + ')" stroke-dasharray="' + (len - 2).toFixed(2) + ' ' + (C - len + 2).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '" transform="rotate(-90 100 100)"/>';
-    off += len; return s;
-  }).join('');
-  return '<svg viewBox="0 0 200 200" role="img" aria-label="توزيع ظهور الشابيطرات في الامتحانات">' + segs +
-    '<text x="100" y="100" text-anchor="middle" class="dn">' + tot + '</text><text x="100" y="120" text-anchor="middle" class="dl">ظهور في الامتحانات</text></svg>';
-}
-function heatCell(v) {
-  if (v === null || v === undefined) return '<td class="na">–</td>';
-  const p = Math.round(v / 10 * 88);
-  return '<td style="background:color-mix(in srgb,var(--ink) ' + p + '%,var(--surface));color:var(' + (p > 46 ? '--surface' : '--ink') + ')">' + v + '</td>';
-}
-function buildStats() {
-  if (!STATS) { $('#v-stats').innerHTML = '<p>لا توجد إحصائيات.</p>'; return; }
-  const sorted = CHAPTERS.slice().sort((a, b) => a.rank - b.rank);
-  const imp = sorted.map((ch) => '<tr><td><i class="chdot" style="background:var(--c' + ch.id + ')"></i><b class="lat">Ch ' + ch.id + '</b> ' + ch.ar + '</td><td class="c m">' + ch.official + '</td><td class="c m"><b>' + ch.app + '</b></td><td class="c m">' + ch.share + '%</td><td class="c m">' + ch.rank + '</td></tr>').join('');
-  const yearTot = STATS.years.map((y, k) => CHAPTERS.reduce((s, c) => s + (STATS.matrix[c.id][k] || 0), 0));
-  const heatRows = CHAPTERS.map((ch) => {
-    const row = STATS.matrix[ch.id], tot = row.reduce((s, v) => s + (v || 0), 0);
-    return '<tr><td class="lab"><i class="chdot" style="background:var(--c' + ch.id + ')"></i>Ch ' + ch.id + ' · ' + ch.en + '</td>' + row.map(heatCell).join('') + '<td><b>' + tot + '</b></td></tr>';
-  }).join('');
-  const topicCards = CHAPTERS.map((ch) => {
-    const rows = STATS.topics[ch.id].map((t) => '<div class="trow" style="' + cv(ch.id) + '"><div class="l"><span style="color:var(--ink);font-family:var(--font-lat)">' + t[0] + '</span><span>' + t[1] + '</span></div><span class="bar"><i style="width:' + t[2] / 11 * 100 + '%"></i></span><span class="v">' + t[2] + '</span></div>').join('');
-    return '<div class="card" style="' + cv(ch.id) + '"><h3><span class="mini">Ch ' + ch.id + '</span><span>' + ch.ar + '</span></h3>' + rows + '</div>';
-  }).join('');
-  const top5 = STATS.top5.map((t) => '<li><span class="lat">' + t[0] + '</span> (Ch ' + t[1] + ') — <b class="lat">' + t[2] + '</b></li>').join('');
-  const rec = STATS.recurring.map((r) => '<tr><td class="seen">×' + r[0] + '</td><td class="lat"><i class="chdot" style="background:var(--c' + r[1] + ')"></i>Ch ' + r[1] + ' · Q' + r[2] + '</td><td><span class="lat" style="display:block">' + r[3] + '</span><span class="small">' + r[4] + '</span></td><td class="m small">' + r[5] + '</td></tr>').join('');
-  const mini = (arr) => '<div class="mini2">' + arr.map((v, k) => '<div class="mrow" style="' + cv(k + 1) + '"><span class="lat">Ch ' + (k + 1) + '</span><span class="bar"><i style="width:' + Math.max(v, 1.5) + '%"></i></span><b>' + v + '%</b></div>').join('') + '</div>';
-  const maxH = Math.max.apply(null, STATS.hours.map((h) => h[1]));
-  const hrs = STATS.hours.map((h) => {
-    const ch = CHAPTERS.filter((c) => c.id === h[0])[0];
-    return '<div class="hrow" style="' + cv(ch.id) + '"><span><b class="lat">Ch ' + ch.id + '</b> ' + ch.ar + '</span><span class="bar"><i style="width:' + h[1] / maxH * 100 + '%"></i></span><b>' + h[1] + ' h</b></div>';
-  }).join('');
-  const must = CHAPTERS.map((ch) => '<tr><td><i class="chdot" style="background:var(--c' + ch.id + ')"></i><b class="lat">Ch ' + ch.id + '</b></td><td>' + STATS.must[ch.id] + '</td></tr>').join('');
-
-  $('#v-stats').innerHTML =
-    '<div class="hero"><p class="kick">Exam statistics</p><h1>إحصائيات الامتحانات</h1><p class="lead">مبنية على 99 كيسيام رسمياً من امتحانات 16/17 إلى 25/26، لتعرف أين تضع وقتك.</p></div>' +
-    '<ul class="facts"><li><b>5</b><span>شابيطرات</span></li><li><b>99</b><span>سؤالاً رسمياً مختلفاً</span></li><li><b>140</b><span>مرة ظهور في الامتحانات</span></li><li><b>7</b><span>سنوات امتحان</span></li><li><b>40%</b><span>أسئلة بأكثر من إجابة</span></li></ul>' +
-    '<div class="sh"><h2>أهمية كل شابيطر في الامتحان</h2><small>How important is each chapter?</small></div>' +
-    '<div class="grid2"><div class="card donut">' + donut() + '<p class="cap">نسبة الظهور في الامتحانات</p></div>' +
-    '<div><div class="tblw" style="margin-top:0"><table class="tbl"><thead><tr><th>الشابيطر</th><th>أسئلة</th><th>ظهور</th><th>النسبة</th><th>الرتبة</th></tr></thead><tbody>' + imp + '<tr><td><b>المجموع</b></td><td class="c m"><b>99</b></td><td class="c m"><b>140</b></td><td class="c m">100%</td><td></td></tr></tbody></table></div>' +
-    '<div class="note"><p>الشابيطر 3 وحده أكثر من ربع الأسئلة، والشابيطران 3 و5 معاً أكثر من النصف (52%). لكن كل شابيطر يظهر في كل سنة تقريباً، فلا يمكن ترك أي واحد.</p></div></div></div>' +
-    '<div class="sh"><h2>سنة بسنة: من أين تأتي الأسئلة؟</h2><small>Year by year</small></div>' +
-    '<div class="tblw"><table class="tbl heat"><thead><tr><th>chapter \\ year</th>' + STATS.years.map((y) => '<th>' + y + '</th>').join('') + '<th>total</th></tr></thead><tbody>' + heatRows +
-    '<tr class="tot"><td class="lab">Total per year</td>' + yearTot.map((v) => '<td>' + v + '</td>').join('') + '<td>140</td></tr></tbody></table></div>' +
-    '<div class="note"><p><b>النمط:</b> الامتحانات الأخيرة فيها بين 15 و24 سؤالاً، أي حوالي 4 أسئلة لكل شابيطر.</p></div>' +
-    '<div class="note"><p>بنك الشابيطر 3 هو الأكبر (30 سؤالاً مختلفاً) والأسئلة تتجدد، فالفهم أهم من الحفظ. والشابيطر 2 هو الأكثر تكراراً لنفس الأسئلة.</p></div>' +
-    '<p class="small">سنة 16/17 موجودة فقط في مجموعة الشابيطر 5، و 20/21 و 21/22 غير موجودتين في المجموعات.</p>' +
-    '<div class="sh"><h2>داخل كل شابيطر: المواضيع المطروحة</h2><small>Topics that are asked</small></div>' +
-    '<div class="topics">' + topicCards + '<div class="dark-card"><h3>المواضيع الخمسة الأكثر مردوداً</h3><ol>' + top5 + '</ol><p>هذه المواضيع وحدها تمثل 41 سؤالاً من 99.</p></div></div>' +
-    '<div class="sh"><h2>الأسئلة التي تتكرر كل سنة</h2><small>The questions that keep coming back</small></div>' +
-    '<div class="tblw" style="margin-top:0"><table class="tbl"><thead><tr><th>مرات</th><th>السؤال</th><th>الموضوع</th><th>السنوات</th></tr></thead><tbody>' + rec + '</tbody></table></div>' +
-    '<div class="note"><p>13 سؤالاً ظهرت في 3 سنوات أو أكثر: أتقنها أولاً فهي شبه نقاط مضمونة.</p></div>' +
-    '<div class="two"><div class="card"><h3>أسئلة بأكثر من إجابة</h3>' + mini(STATS.several) + '</div><div class="card"><h3>أسئلة حسابية</h3>' + mini(STATS.numeric) + '</div></div>' +
-    '<div class="sh"><h2>خطة المراجعة</h2><small>Your revision strategy</small></div>' +
-    '<div class="two"><div class="card"><h3 style="margin-bottom:10px">إذا كان عندك 20 ساعة، وزّعها حسب الامتحان</h3><div class="hrs">' + hrs + '</div><p class="small" style="margin:10px 0 0">الوقت متناسب مع نسبة الظهور.</p></div>' +
-    '<div class="card"><h3 style="margin-bottom:8px">طريقة تعمل</h3><ol class="steps"><li>اقرأ الدرس: الملخص والفخاخ.</li><li>حلّ الكيسيام وحدك ثم اضغط «تحقق».</li><li>اقرأ التصحيح وافهم لماذا أخطأت.</li><li>أعد الأسئلة التي أخطأت فيها بعد أيام.</li></ol>' +
-    '<h3 style="margin:14px 0 6px">نصائح يوم الامتحان</h3><ul class="tips"><li>40% من الأسئلة لها أكثر من إجابة: افحص كل الخيارات.</li><li>الحساب 12% فقط (الشابيطرات 1 و2 و5): احمل القوانين لا طريقة ثقيلة.</li><li>الشابيطران 3 و4 استدلال خالص: ارسم الخانات وضع العنصر.</li></ul></div></div>' +
-    '<div class="sh"><h2>ما يجب إتقانه في كل شابيطر</h2><small>The must-know</small></div>' +
-    '<div class="tblw" style="margin-top:0"><table class="tbl"><tbody>' + must + '</tbody></table></div>' +
-    '<p class="small">مبني على كيسيامات الامتحانات الرسمية CH1–CH5 (99 سؤالاً، سنوات 16/17 → 25/26).</p>';
-}
-
-/* ---------- تشغيل التطبيق بعد القبول ---------- */
-function startApp(content) {
-  CHAPTERS = content.chapters; STATS = content.stats;
-  VIEWS = ['home', 'stats'].concat(CHAPTERS.map((c) => 'ch' + c.id));
   loadProg();
-  $$('.view[data-ch]').forEach((s) => s.remove());
-  built = true;
-  buildHome(); buildStats();
-  CHAPTERS.forEach(buildChapter);
-  renderNav();
-  updateProgress();
-  const first = (location.hash || '').replace('#', '');
-  show(VIEWS.indexOf(first) >= 0 ? first : 'home');
+  ready = true;
+  GATE.hidden = true; GATE.innerHTML = '';
+  VIEW.hidden = false; SIDE.hidden = false; $('#menuBtn').hidden = false;
+  renderUser();
+  router();
 }
 
-/* ---------- الأحداث ---------- */
-let armed = null, armTimer = 0;
+/* ======================= التنقل ======================= */
+function parse() {
+  const h = (location.hash || '#/').replace(/^#\/?/, '').split('/').filter(Boolean);
+  if (!h.length) return { v: 'home' };
+  if (h[0] === 'stats') return { v: 'stats' };
+  if (h[0] === 'c') {
+    const ch = M.chapters.find((c) => String(c.id) === h[1]);
+    if (!ch) return { v: 'home' };
+    if (h[2] === 'p') { const i = FLOW[ch.id].findIndex((p) => String(p.n) === h[3]); if (i >= 0) return { v: 'page', ch: ch, i: i }; }
+    if (h[2] === 'q') { const set = ch.qcm.find((s) => s.key === h[3]); if (set) return { v: 'quiz', ch: ch, set: set, i: Math.max(0, Math.min(set.q.length - 1, (parseInt(h[4], 10) || 1) - 1)) }; }
+    return { v: 'chapter', ch: ch };
+  }
+  return { v: 'home' };
+}
+function router() {
+  if (!ready) return;
+  const r = parse();
+  if (r.v === 'home') home();
+  else if (r.v === 'stats') stats();
+  else if (r.v === 'chapter') chapter(r.ch);
+  else if (r.v === 'page') page(r.ch, r.i);
+  else quiz(r.ch, r.set, r.i);
+  if (r.v !== 'home') { prog.last = location.hash; save(); }
+  side(r);
+  closeSide();
+}
+window.addEventListener('hashchange', () => { router(); window.scrollTo(0, 0); });
+const go = (h) => { if (location.hash === h) router(); else location.hash = h; };
+
+/* ---------- القائمة الجانبية ---------- */
+function side(r) {
+  const cur = (r.ch && r.ch.id) || 0;
+  let h = '<nav aria-label="الفهرس"><a class="sl' + (r.v === 'home' ? ' on' : '') + '" href="#/"><i class="ico">⌂</i>الرئيسية</a>' +
+    '<a class="sl' + (r.v === 'stats' ? ' on' : '') + '" href="#/stats"><i class="ico">▤</i>الإحصائيات وخطة المراجعة</a><p class="sh">الشابيطرات</p>';
+  M.chapters.forEach((ch) => {
+    const st = chStats(ch), open = ch.id === cur;
+    h += '<div class="sch' + (open ? ' open' : '') + '" style="--c:var(--c' + ch.id + ')"><a class="sl ch' + (r.v === 'chapter' && open ? ' on' : '') + '" href="#/c/' + ch.id + '">' +
+      '<b class="num lat">' + ch.id + '</b><span><span class="lat en">' + esc(ch.en) + '</span><small>' + esc(ch.ar) + '</small></span>' +
+      '<i class="ring" style="--p:' + pct(st.read + st.qa, st.pages + st.qn) + '"></i></a>';
+    if (open) {
+      h += '<div class="sub">';
+      ch.sections.forEach((s) => {
+        const first = s.pages[0];
+        const active = r.v === 'page' && s.pages.some((p) => p.n === FLOW[ch.id][r.i].n);
+        const done = s.pages.every((p) => prog.r[p.n]);
+        h += '<a class="ss' + (active ? ' on' : '') + (done ? ' done' : '') + '" href="#/c/' + ch.id + '/p/' + first.n + '"><span class="lat">' + esc(s.key === 'intro' ? '·' : s.key) + '</span>' + esc(s.ar) + '</a>';
+      });
+      const revActive = r.v === 'page' && FLOW[ch.id][r.i].rev;
+      h += '<a class="ss' + (revActive ? ' on' : '') + '" href="#/c/' + ch.id + '/p/' + ch.revision[0].n + '"><span>★</span>المراجعة</a>';
+      ch.qcm.forEach((set) => {
+        const ss = prog.q[setKey(ch.id, set.key)] || {}, a = Object.keys(ss).length;
+        h += '<a class="ss q' + (r.v === 'quiz' && r.set === set ? ' on' : '') + '" href="#/c/' + ch.id + '/q/' + set.key + '"><span>✎</span>' + esc(set.ar) + '<em class="lat">' + a + '/' + set.q.length + '</em></a>';
+      });
+      h += '</div>';
+    }
+    h += '</div>';
+  });
+  SIDE.innerHTML = h + '</nav>';
+}
+function openSide() { SIDE.classList.add('show'); $('#scrim').hidden = false; }
+function closeSide() { SIDE.classList.remove('show'); $('#scrim').hidden = true; }
+
+/* ======================= الصور المحمية ======================= */
+let wmUrl = '';
+function watermark() {
+  if (wmUrl) return wmUrl;
+  const t = esc(me ? me.email : '');
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="200"><text x="20" y="120" transform="rotate(-18 180 100)" font-family="Arial" font-size="15" fill="rgba(10,26,51,0.11)">' + t + '</text></svg>';
+  wmUrl = 'url("data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) + '")';
+  return wmUrl;
+}
+function fig(id, cls, ratio) {
+  return '<figure class="pg ' + (cls || '') + '" data-img="' + esc(id) + '" style="aspect-ratio:' + (ratio || '16 / 9') + '"><span class="sk"></span><i class="wm" style="background-image:' + watermark() + '"></i></figure>';
+}
+function hydrate(root) {
+  $$('figure[data-img]', root || VIEW).forEach((f) => {
+    if (f.dataset.done) return;
+    f.dataset.done = '1';
+    getImage(f.dataset.img).then((src) => {
+      const im = new Image();
+      im.alt = ''; im.draggable = false; im.decoding = 'async';
+      im.onload = () => { f.style.aspectRatio = im.naturalWidth + ' / ' + im.naturalHeight; f.classList.add('ok'); };
+      im.src = src;
+      f.insertBefore(im, f.firstChild);
+    }).catch(() => { f.classList.add('bad'); f.querySelector('.sk').textContent = 'تعذّر تحميل الصورة. تحقق من الاتصال ثم حدّث الصفحة.'; });
+  });
+}
+function prefetch(id) { if (id) getImage(id).catch(() => {}); }
+
+/* ======================= الصفحة الرئيسية ======================= */
+function home() {
+  let tp = 0, tr = 0, tq = 0, ta = 0, tok = 0;
+  const cards = M.chapters.map((ch) => {
+    const s = chStats(ch); tp += s.pages; tr += s.read; tq += s.qn; ta += s.qa; tok += s.qok;
+    const off = ch.qcm.find((x) => x.key === 'official'), pro = ch.qcm.find((x) => x.key === 'proposed');
+    return '<a class="ccard" href="#/c/' + ch.id + '" style="--c:var(--c' + ch.id + ')">' +
+      '<span class="cnum"><small>CH</small><b class="lat">' + ch.id + '</b></span>' +
+      '<span class="ctx"><span class="lat en">' + esc(ch.en) + '</span><span class="ar">' + esc(ch.ar) + '</span><span class="tp lat">' + esc(ch.topics) + '</span>' +
+      '<span class="facts"><span><b class="lat">' + ch.share + '%</b> من الامتحان</span><span><b class="lat">' + s.pages + '</b> صفحة</span><span><b class="lat">' + (off ? off.q.length : 0) + '</b> رسمي</span><span><b class="lat">' + (pro ? pro.q.length : 0) + '</b> مقترح</span></span>' +
+      '<span class="pbar"><i style="width:' + pct(s.read, s.pages) + '%"></i></span><span class="pl">الدروس <b class="lat">' + s.read + '/' + s.pages + '</b> · الكيسيام <b class="lat">' + s.qa + '/' + s.qn + '</b>' + (s.qa ? ' · صحيح <b class="lat">' + pct(s.qok, s.qa) + '%</b>' : '') + '</span></span></a>';
+  }).join('');
+  const off = M.chapters.reduce((a, c) => a + ((c.qcm.find((x) => x.key === 'official') || { q: [] }).q.length), 0);
+  const pro = M.chapters.reduce((a, c) => a + ((c.qcm.find((x) => x.key === 'proposed') || { q: [] }).q.length), 0);
+  const first = (me.name || '').split(' ')[0];
+  VIEW.innerHTML =
+    '<div class="hero"><div class="hero-in"><p class="kick lat">General Chemistry · 1st-year Pharmacy</p>' +
+    '<h1>' + (first ? 'أهلاً ' + esc(first) + '، ' : '') + 'الكيمياء العامة كاملة، شابيطر بشابيطر</h1>' +
+    '<p class="lead">اقرأ كل درس على حدة، ثم حلّ كيسيام الامتحانات والكيسيام المقترح، وتحقق من إجابتك مع الشرح مباشرة.</p>' +
+    '<div class="kpis"><span><b class="lat">' + off + '</b>كيسيام رسمي محلول</span><span><b class="lat">' + pro + '</b>كيسيام مقترح</span><span><b class="lat">' + tp + '</b>صفحة دروس</span><span><b class="lat">' + M.chapters.length + '</b>شابيطرات</span></div>' +
+    (prog.last ? '<p class="acts"><a class="btn pri" href="' + esc(prog.last) + '">تابع من حيث توقفت ←</a><a class="btn ghost" href="#/stats">خطة المراجعة</a></p>' : '<p class="acts"><a class="btn pri" href="#/c/1">ابدأ بالشابيطر الأول ←</a><a class="btn ghost" href="#/stats">خطة المراجعة</a></p>') +
+    '</div></div>' +
+    '<div class="wrap"><div class="overall card"><div><b>تقدّمك العام</b><small>محفوظ على هذا الجهاز</small></div>' +
+    '<div class="ov"><span>الدروس</span><span class="pbar"><i style="width:' + pct(tr, tp) + '%"></i></span><b class="lat">' + pct(tr, tp) + '%</b></div>' +
+    '<div class="ov"><span>الكيسيام</span><span class="pbar"><i style="width:' + pct(ta, tq) + '%"></i></span><b class="lat">' + pct(ta, tq) + '%</b></div>' +
+    '<div class="ov"><span>الإجابات الصحيحة</span><span class="pbar ok"><i style="width:' + pct(tok, ta) + '%"></i></span><b class="lat">' + pct(tok, ta) + '%</b></div></div>' +
+    '<h2 class="h2">الشابيطرات</h2><div class="cgrid">' + cards + '</div></div>';
+}
+
+/* ======================= الإحصائيات ======================= */
+function stats() {
+  VIEW.innerHTML = '<div class="wrap narrow"><nav class="crumb"><a href="#/">الرئيسية</a><span>›</span><b>الإحصائيات</b></nav>' +
+    '<header class="phead"><h1>الإحصائيات وخطة المراجعة</h1><p>تحليل أسئلة الامتحانات الرسمية من 16/17 إلى 25/26: أهمية كل شابيطر، المواضيع المتكررة، وكيف توزع وقت مراجعتك.</p></header>' +
+    M.overview.map((p, i) => '<section class="ovp"><h2><span class="lat">' + (i + 1) + '</span>' + esc(p.ar) + '<small class="lat">' + esc(p.en) + '</small></h2>' + fig(p.img, 'zoomable', '16 / 9') + '</section>').join('') + '</div>';
+  hydrate();
+}
+
+/* ======================= الشابيطر ======================= */
+function chapter(ch) {
+  const s = chStats(ch);
+  const secs = ch.sections.map((sec) =>
+    '<div class="sec"><h3><span class="lat key">' + esc(sec.key === 'intro' ? '·' : sec.key) + '</span><span>' + esc(sec.ar) + '<small class="lat">' + esc(sec.en) + '</small></span></h3><ol class="plist">' +
+    sec.pages.map((p) => '<li><a href="#/c/' + ch.id + '/p/' + p.n + '"' + (prog.r[p.n] ? ' class="done"' : '') + '><span class="lat">' + esc(p.t) + '</span><i class="ck" aria-label="' + (prog.r[p.n] ? 'مقروءة' : '') + '"></i></a></li>').join('') +
+    '</ol></div>').join('');
+  const rev = ch.revision.map((p) => '<a class="tile" href="#/c/' + ch.id + '/p/' + p.n + '"><b>' + esc(p.ar || 'مراجعة') + '</b><small class="lat">' + esc(p.t) + '</small>' + (prog.r[p.n] ? '<i class="ck"></i>' : '') + '</a>').join('');
+  const qs = ch.qcm.map((set) => {
+    const st = prog.q[setKey(ch.id, set.key)] || {}, a = set.q.filter((q) => st[q.n]).length, ok = set.q.filter((q) => st[q.n] && st[q.n].ok).length;
+    return '<a class="qtile ' + set.key + '" href="#/c/' + ch.id + '/q/' + set.key + '"><span class="qk">' + (set.key === 'official' ? 'EXAM' : 'NEW') + '</span><b>' + esc(set.ar) + '</b><small><span class="lat">' + set.q.length + '</span> سؤالاً' + (set.key === 'official' ? ' من امتحانات 16/17 إلى 25/26' : ' بنفس أسلوب الامتحان') + '</small>' +
+      '<span class="pbar"><i style="width:' + pct(a, set.q.length) + '%"></i></span><span class="pl">' + (a ? 'أجبت عن <b class="lat">' + a + '/' + set.q.length + '</b> · صحيح <b class="lat">' + ok + '</b>' : 'لم تبدأ بعد') + '</span><span class="go">' + (a && a < set.q.length ? 'تابع' : a ? 'راجع' : 'ابدأ') + ' ←</span></a>';
+  }).join('');
+  VIEW.innerHTML = '<div class="chero" style="--c:var(--c' + ch.id + ')"><div class="wrap chero-in"><div class="ctext"><nav class="crumb inv"><a href="#/">الرئيسية</a><span>›</span><b>CH ' + ch.id + '</b></nav>' +
+    '<p class="kick lat">Chapter ' + ch.id + '</p><h1><span class="lat">' + esc(ch.en) + '</span><span class="ar">' + esc(ch.ar) + '</span></h1><p class="tp lat">' + esc(ch.topics) + '</p>' +
+    '<div class="chips"><span><b class="lat">' + ch.share + '%</b> من أسئلة الامتحان</span><span>الترتيب <b class="lat">#' + ch.rank + '</b></span><span><b class="lat">' + ch.app + '</b> ظهوراً في الامتحانات</span></div>' +
+    '<p class="acts"><a class="btn pri" href="#/c/' + ch.id + '/p/' + FLOW[ch.id][0].n + '">' + (s.read ? 'تابع الدروس' : 'ابدأ الدرس') + ' ←</a><a class="btn ghost" href="#/c/' + ch.id + '/q/official">كيسيام الامتحانات</a></p></div>' +
+    '<div class="ccover">' + fig(ch.cover, 'cover', '16 / 9') + '</div></div></div>' +
+    '<div class="wrap"><div class="cprog card"><div class="ov"><span>الدروس المقروءة</span><span class="pbar"><i style="width:' + pct(s.read, s.pages) + '%"></i></span><b class="lat">' + s.read + '/' + s.pages + '</b></div>' +
+    '<div class="ov"><span>الكيسيام المحلول</span><span class="pbar"><i style="width:' + pct(s.qa, s.qn) + '%"></i></span><b class="lat">' + s.qa + '/' + s.qn + '</b></div></div>' +
+    '<h2 class="h2">الدروس</h2><div class="secs">' + secs + '</div>' +
+    '<h2 class="h2">الكيسيام</h2><div class="qgrid">' + qs + '</div>' +
+    '<h2 class="h2">أدوات المراجعة</h2><div class="tgrid">' + rev + '</div></div>';
+  hydrate();
+}
+
+/* ======================= صفحة الدرس ======================= */
+function page(ch, i) {
+  const list = FLOW[ch.id], p = list[i], prev = list[i - 1], next = list[i + 1];
+  prog.r[p.n] = 1; save();
+  const secPages = list.filter((x) => x.sec === p.sec && x.rev === p.rev);
+  const k = secPages.indexOf(p) + 1;
+  const nav = (x, dir) => x ? '<a class="pn ' + dir + '" href="#/c/' + ch.id + '/p/' + x.n + '"><small>' + (dir === 'prev' ? '→ السابق' : 'التالي ←') + '</small><span class="lat">' + esc(x.t) + '</span></a>' : '<span class="pn empty"></span>';
+  const endNext = next ? nav(next, 'next') : '<a class="pn next" href="#/c/' + ch.id + '/q/official"><small>انتهت الدروس ←</small><span>انتقل إلى كيسيام الامتحانات</span></a>';
+  VIEW.innerHTML = '<div class="wrap reader"><nav class="crumb"><a href="#/">الرئيسية</a><span>›</span><a href="#/c/' + ch.id + '">CH ' + ch.id + ' · ' + esc(ch.ar) + '</a><span>›</span><b>' + esc(p.secAr) + '</b></nav>' +
+    '<header class="rhead" style="--c:var(--c' + ch.id + ')"><div><p class="kick"><span>' + esc(p.secAr) + '</span>' + (p.rev ? '' : '<span class="lat"> · ' + esc(p.sec) + '</span>') + '</p><h1 class="lat">' + esc(p.t) + '</h1></div>' +
+    '<div class="rmeta"><span class="lat" dir="ltr">' + k + ' / ' + secPages.length + '</span><span class="sep"></span><span>صفحة <b class="lat">' + (i + 1) + '</b> من <b class="lat">' + list.length + '</b></span></div></header>' +
+    '<div class="rbar"><i style="width:' + pct(i + 1, list.length) + '%;background:var(--c' + ch.id + ')"></i></div>' +
+    fig(p.img, 'zoomable page', '16 / 9') +
+    '<p class="hint"><button type="button" class="btn sm" data-zoom>⤢ تكبير وملء الشاشة</button><span>على الهاتف: أدِر الشاشة أفقياً أو استعمل زر التكبير.</span></p>' +
+    '<div class="pnav">' + nav(prev, 'prev') + endNext + '</div></div>';
+  hydrate();
+  prefetch(next && next.img); prefetch(prev && prev.img);
+}
+
+/* ======================= الكيسيام ======================= */
+function quiz(ch, set, i) {
+  const sk = setKey(ch.id, set.key), st = prog.q[sk] || (prog.q[sk] = {});
+  const q = set.q[i], qkey = sk + q.n, res = st[q.n];
+  const sel = res ? res.s.split('') : (quizSel[qkey] || []);
+  const answered = set.q.filter((x) => st[x.n]).length, ok = set.q.filter((x) => st[x.n] && st[x.n].ok).length;
+  const chips = set.q.map((x, j) => '<a class="qc' + (j === i ? ' cur' : '') + (st[x.n] ? (st[x.n].ok ? ' ok' : ' ko') : '') + '" href="#/c/' + ch.id + '/q/' + set.key + '/' + (j + 1) + '" aria-label="سؤال ' + x.n + '"><span class="lat">' + x.n + '</span></a>').join('');
+  const opts = q.opts.split('').map((L) => {
+    let c = 'opt';
+    if (sel.indexOf(L) >= 0) c += ' on';
+    if (res) { const good = q.ans.indexOf(L) >= 0, picked = res.s.indexOf(L) >= 0; c += good && picked ? ' good' : good ? ' miss' : picked ? ' bad' : ' dim'; }
+    return '<button type="button" class="' + c + '" data-opt="' + L + '"' + (res ? ' disabled' : '') + ' aria-pressed="' + (sel.indexOf(L) >= 0) + '"><b class="lat">' + L + '</b></button>';
+  }).join('');
+  const done = answered === set.q.length;
+  const summary = done ? '<div class="qsum card ' + (ok / set.q.length >= 0.5 ? 'pass' : 'fail') + '"><div><small>النتيجة النهائية</small><b class="lat">' + ok + ' / ' + set.q.length + '</b><span class="lat">' + pct(ok, set.q.length) + '%</span></div>' +
+    '<p>' + (ok === set.q.length ? 'ممتاز! أجبت عن كل الأسئلة إجابة صحيحة.' : 'راجع الأسئلة الحمراء وشرحها، ثم أعد محاولتها.') + '</p>' +
+    '<p class="acts">' + (ok < set.q.length ? '<button type="button" class="btn pri" data-q="wrong">أعد الأخطاء فقط</button>' : '') + '<button type="button" class="btn" data-q="reset">ابدأ من جديد</button></p></div>' : '';
+  const verdict = res ? '<div class="verdict ' + (res.ok ? 'ok' : 'ko') + '" role="status"><b>' + (res.ok ? '✓ إجابة صحيحة' : '✗ إجابة غير صحيحة') + '</b><span>إجابتك: <b class="lat">' + esc(res.s) + '</b> · الصحيح: <b class="lat">' + esc(q.ans) + '</b></span></div>' : '';
+  const years = q.years && q.years.length ? '<span class="yrs">ظهر في: <b class="lat">' + q.years.join(' · ') + '</b>' + (q.years.length > 1 ? ' <em class="lat">×' + q.years.length + '</em>' : '') + '</span>' : (set.key === 'proposed' ? '<span class="yrs">سؤال مقترح</span>' : '');
+  VIEW.innerHTML = '<div class="wrap quiz" style="--c:var(--c' + ch.id + ')"><nav class="crumb"><a href="#/">الرئيسية</a><span>›</span><a href="#/c/' + ch.id + '">CH ' + ch.id + ' · ' + esc(ch.ar) + '</a><span>›</span><b>' + esc(set.ar) + '</b></nav>' +
+    '<header class="qhead"><div><p class="kick">' + (set.key === 'official' ? 'EXAM' : 'PROPOSED') + ' · <span class="lat">' + esc(ch.en) + '</span></p><h1>' + esc(set.ar) + '</h1></div>' +
+    '<div class="qscore"><span>أجبت <b class="lat">' + answered + '/' + set.q.length + '</b></span><span class="okc">صحيح <b class="lat">' + ok + '</b></span><span class="koc">خطأ <b class="lat">' + (answered - ok) + '</b></span></div></header>' +
+    '<div class="rbar"><i style="width:' + pct(answered, set.q.length) + '%;background:var(--c)"></i></div>' + summary +
+    '<div class="qchips" aria-label="الأسئلة">' + chips + '</div>' +
+    '<article class="qcard"><div class="qtop"><span class="qn">السؤال <b class="lat">' + q.n + '</b> من <b class="lat">' + set.q.length + '</b></span>' + years + '</div>' +
+    fig(q.q, 'qimg zoomable', '9 / 4') + '<p class="zhint">اضغط على السؤال لتكبيره</p>' +
+    '<div class="opick"><p>' + (res ? 'إجابتك:' : 'اختر الإجابة أو الإجابات الصحيحة (قد تكون أكثر من واحدة):') + '</p><div class="opts">' + opts + '</div>' +
+    (res ? '' : '<button type="button" class="btn pri check" data-q="check"' + (sel.length ? '' : ' disabled') + '>تحقّق من الإجابة</button>') + '</div>' +
+    verdict + (res ? '<div class="sol"><p class="solh">الحل والشرح</p>' + fig(q.s, 'simg zoomable', '9 / 3') + '</div>' : '') +
+    '<div class="qnav">' + (i > 0 ? '<a class="btn" href="#/c/' + ch.id + '/q/' + set.key + '/' + i + '">→ السابق</a>' : '<span></span>') +
+    (res ? '<button type="button" class="btn ghost2" data-q="retry">أعد هذا السؤال</button>' : '<span></span>') +
+    (i < set.q.length - 1 ? '<a class="btn ' + (res ? 'pri' : '') + '" href="#/c/' + ch.id + '/q/' + set.key + '/' + (i + 2) + '">التالي ←</a>' : '<a class="btn" href="#/c/' + ch.id + '">رجوع للشابيطر</a>') + '</div></article>' +
+    '<p class="kbd lat">A–F · Enter · ← →</p></div>';
+  hydrate();
+  if (res) prefetch(set.q[i + 1] && set.q[i + 1].q);
+  else prefetch(q.s);
+  const cur = $('.qc.cur'); if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+function quizCtx() { const r = parse(); return r.v === 'quiz' ? r : null; }
+function toggleOpt(L) {
+  const r = quizCtx(); if (!r) return;
+  const q = r.set.q[r.i], sk = setKey(r.ch.id, r.set.key);
+  if ((prog.q[sk] || {})[q.n] || q.opts.indexOf(L) < 0) return;
+  const k = sk + q.n, s = quizSel[k] || [];
+  const j = s.indexOf(L); if (j >= 0) s.splice(j, 1); else s.push(L);
+  quizSel[k] = s;
+  const b = $('.opt[data-opt="' + L + '"]'); if (b) { b.classList.toggle('on', j < 0); b.setAttribute('aria-pressed', String(j < 0)); }
+  const c = $('[data-q="check"]'); if (c) c.disabled = !s.length;
+}
+function check() {
+  const r = quizCtx(); if (!r) return;
+  const q = r.set.q[r.i], sk = setKey(r.ch.id, r.set.key), k = sk + q.n, s = (quizSel[k] || []).slice().sort().join('');
+  if (!s) return;
+  (prog.q[sk] || (prog.q[sk] = {}))[q.n] = { s: s, ok: s === q.ans.split('').sort().join('') };
+  delete quizSel[k]; save();
+  const y = window.scrollY; quiz(r.ch, r.set, r.i); side(r); window.scrollTo(0, y);
+  const v = $('.verdict'); if (v && v.scrollIntoView) v.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+/* ======================= العارض المكبّر ======================= */
+const ZL = [1, 1.5, 2, 3];
+let vz = 0, vrot = false, vimg = null;
+function openViewer(src, title, kind) {
+  vz = 0; vrot = false;
+  const st = $('#vstage');
+  st.innerHTML = '<img alt="" draggable="false"><i class="wm" style="background-image:' + watermark() + '"></i>';
+  vimg = st.querySelector('img'); vimg.onload = layoutViewer; vimg.src = src;
+  $('#vtitle').textContent = title || '';
+  $('#viewer').hidden = false; document.body.classList.add('noscroll');
+  vrot = window.innerHeight > window.innerWidth * 1.2; // هاتف عمودي: نديرها أفقياً تلقائياً
+  layoutViewer();
+}
+function layoutViewer() {
+  if (!vimg || !vimg.naturalWidth) return;
+  const box = $('#vscroll'), st = $('#vstage'), z = ZL[vz];
+  const W = box.clientWidth, H = box.clientHeight, r = vimg.naturalHeight / vimg.naturalWidth;
+  let iw, ih;
+  if (!vrot) { iw = Math.min(W, H / r) * z; ih = iw * r; st.style.width = iw + 'px'; st.style.height = ih + 'px'; vimg.style.cssText = 'width:' + iw + 'px;height:' + ih + 'px'; }
+  else { iw = Math.min(H, W / r) * z; ih = iw * r; st.style.width = ih + 'px'; st.style.height = iw + 'px'; vimg.style.cssText = 'width:' + iw + 'px;height:' + ih + 'px;transform-origin:0 0;transform:translateX(' + ih + 'px) rotate(90deg)'; }
+  const wm = st.querySelector('.wm'); if (wm) wm.style.cssText = 'background-image:' + watermark();
+  $('#vzoom').textContent = Math.round(z * 100) + '%';
+}
+function closeViewer() { $('#viewer').hidden = true; $('#vstage').innerHTML = ''; vimg = null; document.body.classList.remove('noscroll'); }
+window.addEventListener('resize', () => { if (!$('#viewer').hidden) layoutViewer(); });
+
+/* ======================= الأحداث ======================= */
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  const act = t.closest('[data-act]');
-  if (act) {
-    const a = act.dataset.act;
-    act.disabled = true;
-    try {
-      if (a === 'login') await signIn();
-      else if (a === 'logout') await signOutUser();
-      else if (a === 'request') { await sendRequest(me); gPending(me); }
-      else if (a === 'recheck') await route(me);
-    } catch (err) {
-      act.disabled = false;
-      const c = err && err.code;
-      if (c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request') return;
-      if (a === 'login') gLogin(friendly(err)); else gError(friendly(err));
+  const a = t.closest('[data-act]');
+  if (a) {
+    const act = a.dataset.act;
+    if (act === 'login') { try { await signIn(); } catch (err) { if (!(err && err.code === 'auth/popup-closed-by-user')) gLogin(friendly(err)); } }
+    else if (act === 'logout') { quizSel = {}; wmUrl = ''; ready = false; await signOutUser(); }
+    else if (act === 'request') { a.disabled = true; try { await sendRequest(me); gPending(me); } catch (err) { gError(friendly(err)); } }
+    else if (act === 'recheck') onUser(me);
+    return;
+  }
+  if (t.closest('#menuBtn')) { SIDE.classList.contains('show') ? closeSide() : openSide(); return; }
+  if (t.closest('#scrim')) { closeSide(); return; }
+  const o = t.closest('[data-opt]'); if (o && !o.disabled) { toggleOpt(o.dataset.opt); return; }
+  const qb = t.closest('[data-q]');
+  if (qb) {
+    const r = quizCtx(); if (!r) return;
+    const sk = setKey(r.ch.id, r.set.key), st = prog.q[sk] || (prog.q[sk] = {});
+    const cmd = qb.dataset.q;
+    if (cmd === 'check') check();
+    else if (cmd === 'retry') { delete st[r.set.q[r.i].n]; save(); router(); }
+    else if (cmd === 'wrong') {
+      const wrong = r.set.q.filter((x) => st[x.n] && !st[x.n].ok);
+      wrong.forEach((x) => delete st[x.n]); save();
+      go('#/c/' + r.ch.id + '/q/' + r.set.key + '/' + (r.set.q.indexOf(wrong[0]) + 1));
+    } else if (cmd === 'reset') {
+      if (qb.dataset.armed !== '1') { qb.dataset.armed = '1'; qb.textContent = 'تأكيد: مسح كل الإجابات؟'; setTimeout(() => { if (qb.isConnected) { qb.dataset.armed = ''; qb.textContent = 'ابدأ من جديد'; } }, 4000); return; }
+      prog.q[sk] = {}; save(); go('#/c/' + r.ch.id + '/q/' + r.set.key + '/1');
     }
     return;
   }
-  const go = t.closest('[data-go]'); if (go) { show(go.dataset.go); return; }
-  const tab = t.closest('[data-tab]'); if (tab) { setTab(tab.closest('.view'), tab.dataset.tab); return; }
-  const tg = t.closest('[data-tabgo]'); if (tg) { setTab(tg.closest('.view'), tg.dataset.tabgo); return; }
-  const chk = t.closest('[data-check]'); if (chk) { checkCard(chk.closest('.q')); return; }
-  const rt = t.closest('[data-retry]'); if (rt) { resetCard(rt.closest('.q')); return; }
-  const rs = t.closest('[data-reset]');
-  if (rs) {
-    if (armed !== rs) {
-      armed = rs; rs.textContent = 'اضغط مرة أخرى للتأكيد';
-      clearTimeout(armTimer); armTimer = setTimeout(() => { rs.textContent = 'مسح تقدّمي'; armed = null; }, 4000);
-    } else {
-      clearTimeout(armTimer); armed = null; rs.textContent = 'مسح تقدّمي';
-      const ch = CHAPTERS.filter((c) => c.id === +rs.dataset.reset)[0];
-      ch.qcm.forEach((q, i) => { delete prog[qid(ch, i)]; resetCard($('#' + qid(ch, i))); });
-      save(); updateProgress();
-    }
+  const z = t.closest('[data-zoom]') ? $('figure.zoomable.ok', VIEW) : t.closest('figure.zoomable.ok');
+  if (z) { const im = z.querySelector('img'); if (im) openViewer(im.src, (($('.rhead h1') || $('.qn') || {}).textContent) || '', !z.classList.contains('page') && !z.classList.contains('cover') && z.closest('.quiz') ? 'card' : 'page'); return; }
+  const v = t.closest('[data-v]');
+  if (v) {
+    const c = v.dataset.v;
+    if (c === 'close') closeViewer();
+    else if (c === 'in') { vz = Math.min(ZL.length - 1, vz + 1); layoutViewer(); }
+    else if (c === 'out') { vz = Math.max(0, vz - 1); layoutViewer(); }
+    else if (c === 'rot') { vrot = !vrot; layoutViewer(); }
   }
 });
-document.addEventListener('change', (e) => {
-  const card = e.target.closest && e.target.closest('.q'); if (!card) return;
-  $('[data-check]', card).disabled = !$('input:checked', card);
-});
 
-/* للدراسة فقط: لا نسخ ولا حفظ ولا طباعة من الصفحة */
-['contextmenu', 'copy', 'cut', 'dragstart', 'selectstart'].forEach((t) => {
-  document.addEventListener(t, (e) => e.preventDefault());
-});
 document.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && ['c', 'x', 'a', 's', 'p', 'u'].indexOf(e.key.toLowerCase()) >= 0) e.preventDefault();
+  const k = (e.key || '').toLowerCase();
+  // منع النسخ والحفظ والطباعة
+  if ((e.ctrlKey || e.metaKey) && ['c', 'x', 'a', 's', 'p', 'u'].indexOf(k) >= 0) { e.preventDefault(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!$('#viewer').hidden) { if (k === 'escape') closeViewer(); else if (k === '+' || k === '=') { vz = Math.min(ZL.length - 1, vz + 1); layoutViewer(); } else if (k === '-') { vz = Math.max(0, vz - 1); layoutViewer(); } return; }
+  if (!ready || /input|textarea|select/i.test((e.target.tagName || ''))) return;
+  const r = parse();
+  if (r.v === 'quiz') {
+    if (/^[a-f]$/.test(k)) { toggleOpt(k.toUpperCase()); e.preventDefault(); return; }
+    if (k === 'enter') { const c = $('[data-q="check"]'); if (c && !c.disabled) { check(); e.preventDefault(); } return; }
+  }
+  if (r.v === 'quiz' || r.v === 'page') {
+    // الواجهة من اليمين لليسار: السهم الأيسر = التالي
+    if (k === 'arrowleft') { const n = $('.pnav .next, .qnav a.btn:last-child'); if (n && n.href) { location.href = n.href; e.preventDefault(); } }
+    if (k === 'arrowright') { const p = $('.pnav .prev, .qnav a.btn:first-child'); if (p && p.href && /السابق/.test(p.textContent)) { location.href = p.href; e.preventDefault(); } }
+  }
 });
 
-watchUser(route);
+['contextmenu', 'copy', 'cut', 'dragstart', 'selectstart'].forEach((ev) => document.addEventListener(ev, (e) => {
+  if (ev === 'selectstart' && /input|textarea/i.test((e.target && e.target.tagName) || '')) return;
+  e.preventDefault();
+}));
+
+watchUser(onUser);

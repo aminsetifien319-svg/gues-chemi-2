@@ -4,7 +4,8 @@ import {
   getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
-  getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache,
+  doc, getDoc, getDocFromCache, getDocFromServer, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
 
@@ -14,7 +15,12 @@ let auth = null, db = null;
 if (!configMissing) {
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app);
-  db = getFirestore(app);
+  // نخزّن الصور في ذاكرة المتصفح بعد أول تحميل حتى لا تُحمَّل كل مرة (أسرع وأوفر).
+  try {
+    db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  } catch (e) {
+    db = initializeFirestore(app, { localCache: memoryLocalCache() });
+  }
 }
 
 const lower = (s) => String(s || '').trim().toLowerCase();
@@ -45,9 +51,9 @@ export function signOutUser() { return signOut(auth); }
 
 /* ---------- صلاحية الطالب ---------- */
 export async function getAccess(email) {
-  const adm = await getDoc(doc(db, 'admins', email));
+  const adm = await getDocFromServer(doc(db, 'admins', email)).catch(() => getDoc(doc(db, 'admins', email)));
   if (adm.exists()) return 'admin';
-  const al = await getDoc(doc(db, 'allowed', email));
+  const al = await getDocFromServer(doc(db, 'allowed', email)).catch(() => getDoc(doc(db, 'allowed', email)));
   if (al.exists()) return 'allowed';
   const rq = await getDoc(doc(db, 'requests', email));
   return rq.exists() ? 'pending' : 'none';
@@ -61,17 +67,26 @@ export async function sendRequest(user) {
   });
 }
 
-export async function loadContent() {
-  const snap = await getDocs(collection(db, 'content'));
-  const out = { chapters: [], stats: null };
-  snap.forEach((d) => {
-    const raw = d.data().json;
-    if (!raw) return;
-    const j = JSON.parse(raw);
-    if (d.id === 'stats') out.stats = j; else out.chapters.push(j);
+/* ---------- المحتوى ---------- */
+// الفهرس صغير ويُقرأ من الخادم دائماً حتى يظهر أي تحديث فوراً.
+export async function loadManifest() {
+  const s = await getDocFromServer(doc(db, 'content', 'manifest')).catch(() => getDoc(doc(db, 'content', 'manifest')));
+  if (!s.exists()) return null;
+  return JSON.parse(s.data().json);
+}
+
+// الصور ثابتة (رقم النسخة داخل المعرّف)، فنقرؤها من ذاكرة المتصفح أولاً.
+const memo = new Map();
+export function getImage(id) {
+  if (memo.has(id)) return memo.get(id);
+  const ref = doc(db, 'content', 'img_' + id);
+  const p = getDocFromCache(ref).catch(() => getDoc(ref)).then((s) => {
+    if (!s.exists()) throw new Error('missing image ' + id);
+    return s.data().d;
   });
-  out.chapters.sort((a, b) => a.id - b.id);
-  return out;
+  p.catch(() => memo.delete(id));
+  memo.set(id, p);
+  return p;
 }
 
 /* ---------- الإدارة ---------- */
@@ -105,15 +120,12 @@ export async function addAllowed(email) {
   await setDoc(doc(db, 'allowed', lower(email)), { email: lower(email), name: '', approvedAt: serverTimestamp() });
 }
 
-// content: { chapters: [...], stats: {...} } ← يُخزَّن كل جزء كنص JSON (Firestore لا يقبل مصفوفات داخل مصفوفات)
-export async function uploadContent(content) {
-  const b = writeBatch(db);
-  content.chapters.forEach((ch) => {
-    const json = JSON.stringify(ch);
-    if (json.length > 900000) throw new Error('الشابيطر ' + ch.id + ' كبير جداً (أكثر من 900KB)');
-    b.set(doc(db, 'content', 'ch' + ch.id), { json: json });
-  });
-  if (content.stats) b.set(doc(db, 'content', 'stats'), { json: JSON.stringify(content.stats) });
-  await b.commit();
-  return content.chapters.length;
+export async function uploadImage(id, data) {
+  await setDoc(doc(db, 'content', 'img_' + id), { d: data });
+}
+
+export async function uploadManifest(manifest) {
+  const json = JSON.stringify(manifest);
+  if (json.length > 900000) throw new Error('الفهرس كبير جداً.');
+  await setDoc(doc(db, 'content', 'manifest'), { json: json, updatedAt: serverTimestamp() });
 }

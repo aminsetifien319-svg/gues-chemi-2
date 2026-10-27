@@ -2,7 +2,8 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, configMissing
-} from './firebase.js?v=6';
+} from './firebase.js?v=7';
+import { fmt, typeset } from './rich.js?v=7';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -28,11 +29,11 @@ try { viewMode = localStorage.getItem('gueschemi.view') === 'orig' ? 'orig' : 't
 /* =================================================================
    التقدّم: محفوظ في المتصفح + في حساب الطالب
    ================================================================= */
-function blank() { return { v: 4, r: {}, a: {}, f: {}, sr: {}, last: '', lastT: 0, exam: null, hist: [] }; }
+function blank() { return { v: 4, r: {}, a: {}, f: {}, sr: {}, fc: {}, last: '', lastT: 0, exam: null, hist: [] }; }
 function upgrade(p) {
   if (!p || typeof p !== 'object') return blank();
   const out = blank();
-  if (p.v >= 3) return Object.assign(out, p, { v: 4, r: p.r || {}, a: p.a || {}, f: p.f || {}, sr: p.sr || {}, hist: p.hist || [] });
+  if (p.v >= 3) return Object.assign(out, p, { v: 4, r: p.r || {}, a: p.a || {}, f: p.f || {}, sr: p.sr || {}, fc: p.fc || {}, hist: p.hist || [] });
   out.r = p.r || {}; out.last = p.last || '';
   Object.keys(p.q || {}).forEach((s) => Object.keys(p.q[s] || {}).forEach((n) => { const x = p.q[s][n]; if (x && x.s) out.a[s + n] = { s: x.s, ok: !!x.ok, t: 1 }; }));
   return out;
@@ -52,7 +53,7 @@ function mergeMap(a, b) {
 function merge(a, b) {
   if (!b) return a;
   const o = blank();
-  o.r = mergeMap(a.r, b.r); o.a = mergeMap(a.a, b.a); o.f = mergeMap(a.f, b.f); o.sr = mergeMap(a.sr, b.sr);
+  o.r = mergeMap(a.r, b.r); o.a = mergeMap(a.a, b.a); o.f = mergeMap(a.f, b.f); o.sr = mergeMap(a.sr, b.sr); o.fc = mergeMap(a.fc, b.fc);
   const L = (a.lastT || 0) >= (b.lastT || 0) ? a : b; o.last = L.last; o.lastT = L.lastT || 0;
   const H = {}; (a.hist || []).concat(b.hist || []).forEach((h) => { if (h && h.id) H[h.id] = h; });
   o.hist = Object.keys(H).map((k) => H[k]).sort((x, y) => y.end - x.end).slice(0, 20);
@@ -117,6 +118,12 @@ function chText(ch) {
   if (!ch.text) return Promise.resolve(null);
   if (!TXT[ch.id]) TXT[ch.id] = getImage(ch.text).then((s) => JSON.parse(s)).catch((e) => { delete TXT[ch.id]; throw e; });
   return TXT[ch.id];
+}
+const FCD = {};
+function chFlash(ch) {
+  if (!ch.flash) return Promise.resolve(null);
+  if (!FCD[ch.id]) FCD[ch.id] = getImage(ch.flash).then((s) => { const L = JSON.parse(s).cards || []; FCARDS[ch.id] = L; return L; }).catch((e) => { delete FCD[ch.id]; FCARDS[ch.id] = null; throw e; });
+  return FCD[ch.id];
 }
 function qText(key) { return chText(ITEMS[key].ch).then((t) => t && t.q[key]); }
 
@@ -228,6 +235,7 @@ async function onUser(u) {
 
 function start(remote) {
   FLOW = {}; ITEMS = {}; SETKEYS = {};
+  const FIX = (M.fix && M.fix.ans) || {};   // تصحيحات الأجوبة من محرّر الإدارة
   M.chapters.forEach((ch) => {
     const list = [];
     ch.sections.forEach((s) => s.pages.forEach((p) => list.push({ img: p.img, n: p.n, t: p.t, sec: s.en, secAr: s.ar, rev: false })));
@@ -235,7 +243,7 @@ function start(remote) {
     FLOW[ch.id] = list;
     ch.qcm.forEach((set) => {
       const s = sk(ch.id, set.key); SETKEYS[s] = [];
-      set.q.forEach((q, i) => { const k = s + q.n; ITEMS[k] = { key: k, ch: ch, set: set, q: q, i: i }; SETKEYS[s].push(k); });
+      set.q.forEach((q, i) => { const k = s + q.n; if (FIX[k]) q.ans = FIX[k]; ITEMS[k] = { key: k, ch: ch, set: set, q: q, i: i }; SETKEYS[s].push(k); });
     });
   });
   prog = merge(readLocal(), remote);
@@ -246,7 +254,7 @@ function start(remote) {
   VIEW.hidden = false; SIDE.hidden = false; $('#menuBtn').hidden = false; $('#searchBtn').hidden = false;
   renderUser();
   clearInterval(tick); tick = setInterval(onTick, 1000);
-  M.chapters.forEach((ch) => chText(ch).catch(() => {}));   // تحميل مسبق للنصوص
+  M.chapters.forEach((ch) => { chText(ch).catch(() => {}); chFlash(ch).then(() => { if (ready) side(parse()); }).catch(() => {}); });   // تحميل مسبق للنصوص والبطاقات
   router();
 }
 
@@ -262,6 +270,7 @@ function parse() {
   if (h[0] === 'progress') return { v: 'progress' };
   if (h[0] === 'search') return { v: 'search', q: decodeURIComponent(raw.slice(7) || '') };
   if (h[0] === 'today') return { v: 'review', src: 'today', i: n(h[1]) - 1 };
+  if (h[0] === 'cards') { const ch = h[1] && M.chapters.find((c) => String(c.id) === h[1]); return ch ? { v: 'deck', ch: ch, all: h[2] === 'all' } : { v: 'cards' }; }
   if (h[0] === 'review' && h[1]) return { v: 'review', src: h[1], i: n(h[2]) - 1 };
   if (h[0] === 'exam') {
     if (h[1] === 'q') return { v: 'examq', i: n(h[2]) - 1 };
@@ -291,10 +300,13 @@ function router() {
   else if (r.v === 'progress') progressPage();
   else if (r.v === 'search') searchPage(r.q);
   else if (r.v === 'review') review(r);
+  else if (r.v === 'cards') cardsHome();
+  else if (r.v === 'deck') deck(r.ch, r.all);
   else if (r.v === 'exam') examHome();
   else if (r.v === 'examq') examQ(r.i);
   else if (r.v === 'examr') examResult(r.id);
   else if (r.v === 'examrq') examReview(r.id, r.i);
+  if (r.v !== 'deck') FS = null;
   if (r.v === 'page' || r.v === 'quiz' || r.v === 'chapter') { prog.last = location.hash; prog.lastT = now(); save(); }
   side(r);
   closeSide();
@@ -313,6 +325,7 @@ function side(r) {
     '<a class="sl' + (r.v === 'stats' ? ' on' : '') + '" href="#/stats"><i class="ico">▤</i>الإحصائيات وخطة المراجعة</a>' +
     '<p class="sh">أدوات المراجعة</p>' +
     '<a class="sl' + (r.v === 'review' && r.src === 'today' ? ' on' : '') + '" href="#/today"><i class="ico">↻</i>مراجعة اليوم' + (nd ? '<em class="lat live">' + nd + '</em>' : '') + '</a>' +
+    '<a class="sl' + (r.v === 'cards' || r.v === 'deck' ? ' on' : '') + '" href="#/cards"><i class="ico">❐</i>بطاقات المراجعة' + (fcDueAll() ? '<em class="lat live">' + fcDueAll() + '</em>' : '') + '</a>' +
     '<a class="sl' + (/^exam/.test(r.v) ? ' on' : '') + '" href="#/exam"><i class="ico">⏱</i>امتحان تجريبي' + ex + '</a>' +
     '<a class="sl' + (r.v === 'mistakes' || (r.v === 'review' && r.src.indexOf('wrong') === 0) ? ' on' : '') + '" href="#/mistakes"><i class="ico">✗</i>أخطائي' + (nw ? '<em class="lat bad">' + nw + '</em>' : '') + '</a>' +
     '<a class="sl' + (r.v === 'fav' || (r.v === 'review' && r.src === 'fav') ? ' on' : '') + '" href="#/fav"><i class="ico">★</i>المفضلة' + (nf ? '<em class="lat">' + nf + '</em>' : '') + '</a>' +
@@ -359,6 +372,7 @@ function fig(id, cls, ratio) {
   return '<figure class="pg ' + (cls || '') + '" data-img="' + esc(id) + '" style="aspect-ratio:' + (ratio || '16 / 9') + '"><span class="sk"></span><i class="wm"></i></figure>';
 }
 function hydrate(root) {
+  typeset(root || VIEW);
   $$('.wm', root || VIEW).forEach((w) => { if (!w.style.backgroundImage) w.style.backgroundImage = watermark(); });
   $$('figure[data-img]', root || VIEW).forEach((f) => {
     if (f.dataset.done) return;
@@ -407,11 +421,12 @@ function home() {
     '<div class="ov"><span>الدروس</span><span class="pbar"><i style="width:' + pct(tr, tp) + '%"></i></span><b class="lat">' + pct(tr, tp) + '%</b></div>' +
     '<div class="ov"><span>الكيسيام</span><span class="pbar"><i style="width:' + pct(ta, tq) + '%"></i></span><b class="lat">' + pct(ta, tq) + '%</b></div>' +
     '<div class="ov"><span>الإجابات الصحيحة</span><span class="pbar ok"><i style="width:' + pct(tok, ta) + '%"></i></span><b class="lat">' + pct(tok, ta) + '%</b></div></div>' +
-    '<div class="tools four">' +
+    '<div class="tools five">' +
     '<a class="tool today" href="#/today"><i>↻</i><b>مراجعة اليوم</b><small>' + (nd ? '<span class="lat">' + nd + '</span> سؤالاً حان موعد مراجعته' : 'لا شيء اليوم، أحسنت') + '</small></a>' +
     '<a class="tool exam" href="#/exam"><i>⏱</i><b>' + (prog.exam ? 'امتحان جارٍ' : 'امتحان تجريبي') + '</b><small>' + (prog.exam ? 'الوقت المتبقي <span class="lat" data-timer>' + fmtT(examLeft()) + '</span>' : lastEx ? 'آخر نتيجة: <span class="lat">' + lastEx.ok + '/' + lastEx.n + '</span> (' + pct(lastEx.ok, lastEx.n) + '%)' : '20 إلى 100 سؤال بالوقت الذي تختاره') + '</small></a>' +
     '<a class="tool wrong" href="#/mistakes"><i>✗</i><b>أخطائي</b><small>' + (nw ? '<span class="lat">' + nw + '</span> سؤالاً تحتاج مراجعة' : 'لا أخطاء الآن') + '</small></a>' +
-    '<a class="tool fav" href="#/fav"><i>★</i><b>المفضلة</b><small>' + (nf ? '<span class="lat">' + nf + '</span> عنصراً محفوظاً' : 'احفظ أي درس أو سؤال بالنجمة') + '</small></a></div>' +
+    '<a class="tool fav" href="#/fav"><i>★</i><b>المفضلة</b><small>' + (nf ? '<span class="lat">' + nf + '</span> عنصراً محفوظاً' : 'احفظ أي درس أو سؤال بالنجمة') + '</small></a>' +
+    '<a class="tool cards" href="#/cards"><i>❐</i><b>بطاقات المراجعة</b><small>' + (fcDueAll() ? '<span class="lat">' + fcDueAll() + '</span> بطاقة حان موعدها' : 'التعاريف والقوانين في بطاقات سريعة') + '</small></a></div>' +
     '<h2 class="h2">الشابيطرات</h2><div class="cgrid">' + cards + '</div></div>';
 }
 
@@ -451,7 +466,7 @@ function chapter(ch) {
     '<h2 class="h2">الدروس</h2><div class="secs">' + secs + '</div>' +
     '<h2 class="h2">الكيسيام</h2><div class="qgrid">' + qs + '</div>' +
     (nw ? '<p class="wrongline">لديك <b class="lat">' + nw + '</b> أخطاء في هذا الشابيطر. <a href="#/review/wrong' + ch.id + '/1">راجعها الآن ←</a></p>' : '') +
-    '<h2 class="h2">أدوات المراجعة</h2><div class="tgrid">' + rev + '</div></div>';
+    '<h2 class="h2">أدوات المراجعة</h2><div class="tgrid">' + (ch.flash ? '<a class="tile fct" href="#/cards/' + ch.id + '"><b>❐ بطاقات المراجعة</b><small>Flashcards · ' + fcLine(ch) + '</small></a>' : '') + rev + '</div></div>';
   hydrate();
 }
 
@@ -479,7 +494,7 @@ function page(ch, i) {
     const P = T.pages[p.n];
     const at = $('[data-artitle]'); if (at && P && P.ar) at.textContent = P.ar;
     if (viewMode !== 'orig' && P) {
-      $('#lbody').innerHTML = '<article class="lesson" style="--c:var(--c' + ch.id + ')">' + P.html + '</article>';
+      $('#lbody').innerHTML = '<article class="lesson" style="--c:var(--c' + ch.id + ')">' + fmt(P.html) + '</article>';
       hydrate($('#lbody'));
     }
   }).catch(() => { if (rid === renderId && viewMode !== 'orig') { $('#lbody').innerHTML = fig(p.img, 'zoomable page', '16 / 9'); hydrate(); } });
@@ -495,7 +510,7 @@ function optRows(key, q, T, sel, r, locked) {
     let c = 'orow';
     if (sel.indexOf(L) >= 0) c += ' on';
     if (r) { const good = q.ans.indexOf(L) >= 0, picked = r.s.indexOf(L) >= 0; c += good && picked ? ' good' : good ? ' miss' : picked ? ' bad' : ' dim'; }
-    const body = o ? '<span class="ot">' + (o.en ? '<span class="oe" dir="ltr">' + o.en + '</span>' : '') + (o.ar ? '<span class="oa" dir="rtl">' + o.ar + '</span>' : '') + (o.fig || '') + '</span>' : '<span class="ot"></span>';
+    const body = o ? '<span class="ot">' + (o.en ? '<span class="oe" dir="ltr">' + fmt(o.en) + '</span>' : '') + (o.ar ? '<span class="oa" dir="rtl">' + fmt(o.ar) + '</span>' : '') + (o.fig || '') + '</span>' : '<span class="ot"></span>';
     const mark = r ? (q.ans.indexOf(L) >= 0 ? '<i class="om">✓</i>' : r.s.indexOf(L) >= 0 ? '<i class="om">✗</i>' : '') : '';
     return '<button type="button" class="' + c + '" data-opt="' + L + '"' + (locked ? ' disabled' : '') + ' aria-pressed="' + (sel.indexOf(L) >= 0) + '"><b class="ol lat">' + L + '</b>' + body + mark + '</button>';
   }).join('');
@@ -544,8 +559,8 @@ function qscreen(ctx) {
     qText(key).then((T) => {
       if (rid !== renderId) return;
       if (!T) { $('#qbody').innerHTML = fig(q.q, 'qimg zoomable', '9 / 4'); hydrate(); return; }
-      $('#qbody').innerHTML = '<div class="qtext">' + (T.en ? '<p class="stem" dir="ltr">' + T.en + '</p>' : '') + (T.ar ? '<p class="stem sa" dir="rtl">' + T.ar + '</p>' : '') + (T.fig || '') + '</div>' + optRows(key, q, T, sel, r, locked);
-      const sb = $('#sbody'); if (sb) sb.innerHTML = '<div class="solt">' + T.s + '</div>';
+      $('#qbody').innerHTML = '<div class="qtext">' + (T.en ? '<p class="stem" dir="ltr">' + fmt(T.en) + '</p>' : '') + (T.ar ? '<p class="stem sa" dir="rtl">' + fmt(T.ar) + '</p>' : '') + (T.fig || '') + '</div>' + optRows(key, q, T, sel, r, locked);
+      const sb = $('#sbody'); if (sb) sb.innerHTML = '<div class="solt">' + fmt(T.s) + '</div>';
       hydrate();
     }).catch(() => { if (rid === renderId) { $('#qbody').innerHTML = fig(q.q, 'qimg zoomable', '9 / 4') + letterRow(q, sel, r, locked); hydrate(); } });
   }
@@ -635,6 +650,93 @@ function favorites() {
     (!pages.length && !qs.length ? '<div class="empty card"><b>لا شيء في المفضلة بعد</b><p>افتح أي درس أو سؤال واضغط ☆.</p></div>' : '') +
     (pages.length ? '<h2 class="h2">صفحات الدروس <small class="lat">' + pages.length + '</small></h2><div class="tgrid">' + pl + '</div>' : '') +
     (qs.length ? '<h2 class="h2">الأسئلة <small class="lat">' + qs.length + '</small></h2><p class="acts" style="margin:0 0 12px"><a class="btn pri" href="#/review/fav/1">راجع أسئلة المفضلة ←</a></p><div class="mqs">' + ql + '</div>' : '') + '</div>';
+}
+
+/* =================================================================
+   بطاقات المراجعة (Flashcards) · تكرار متباعد: 1 · 3 · 7 · 14 · 30 يوماً
+   ================================================================= */
+const FC_DAYS = [0, 1, 3, 7, 14, 30];
+const FCARDS = {};
+let FS = null;
+const fcRec = (id) => { const x = prog.fc[id]; return x && x.t ? x : null; };
+const fcIsDue = (c) => { const x = fcRec(c.id); return !x || x.due <= now(); };
+function fcStat(ch) {
+  const L = FCARDS[ch.id] || []; let nw = 0, due = 0, mast = 0;
+  L.forEach((c) => { const x = fcRec(c.id); if (!x) nw++; else { if (x.due <= now()) due++; if (x.b >= 4) mast++; } });
+  return { n: L.length, nw: nw, due: due, mast: mast };
+}
+function fcDueAll() { return M.chapters.reduce((a, ch) => a + fcStat(ch).due, 0); }
+function fcLine(ch) { const s = fcStat(ch); return s.n ? s.n + ' cards · ✓ ' + s.mast : 'Flashcards'; }
+const cardText = (t) => fmt(esc(t || ''));
+function cardsHome() {
+  const rid = renderId;
+  const pend = M.chapters.filter((ch) => ch.flash && !(ch.id in FCARDS));
+  if (pend.length) Promise.all(pend.map((ch) => chFlash(ch).catch(() => null))).then(() => { if (rid === renderId) { cardsHome(); side(parse()); } });
+  const any = M.chapters.some((ch) => ch.flash);
+  const rows = M.chapters.filter((ch) => ch.flash).map((ch) => {
+    const s = fcStat(ch), todo = s.nw + s.due;
+    return '<div class="fcrow card" style="--c:var(--c' + ch.id + ')"><span class="cnum sm"><b class="lat">' + ch.id + '</b></span>' +
+      '<span class="mt"><b>' + esc(ch.ar) + '</b><small class="lat">' + esc(ch.en) + '</small></span>' +
+      '<span class="fcst"><span><b class="lat">' + s.n + '</b> بطاقة</span><span><b class="lat">' + s.nw + '</b> جديدة</span><span class="due"><b class="lat">' + s.due + '</b> للمراجعة</span><span class="okc"><b class="lat">' + s.mast + '</b> محفوظة</span></span>' +
+      '<span class="pbar ok"><i style="width:' + pct(s.mast, s.n) + '%"></i></span>' +
+      '<span class="fca">' + (todo ? '<a class="btn sm pri" href="#/cards/' + ch.id + '">ابدأ <span class="lat">(' + todo + ')</span></a>' : '<span class="okc">✓ لا شيء الآن</span>') + '<a class="btn sm" href="#/cards/' + ch.id + '/all">كل البطاقات</a></span></div>';
+  }).join('');
+  VIEW.innerHTML = '<div class="wrap narrow">' + crumbs([['بطاقات المراجعة']]) +
+    '<header class="phead"><h1>بطاقات المراجعة</h1><p>اقرأ السؤال، حاول أن تتذكّر الجواب، ثم اقلب البطاقة. ما تعرفه يعود إليك بعد 1 ثم 3 ثم 7 ثم 14 ثم 30 يوماً، وما لا تعرفه يعود في الجلسة نفسها.</p></header>' +
+    (any ? '<div class="fclist">' + rows + '</div>' : '<div class="empty card"><b>لم تُرفع البطاقات بعد</b><p>ستظهر هنا عندما يرفعها المشرف.</p></div>') + '</div>';
+}
+function deck(ch, all) {
+  const rid = renderId;
+  if (!(ch.id in FCARDS)) {
+    VIEW.innerHTML = '<div class="wrap narrow">' + loading + '</div>';
+    chFlash(ch).catch(() => {}).then(() => { if (rid === renderId) deck(ch, all); });
+    return;
+  }
+  const L = FCARDS[ch.id] || [], byId = {};
+  L.forEach((c) => { byId[c.id] = c; });
+  if (!FS || FS.cid !== ch.id || FS.all !== all) {
+    const pick = all ? shuffle(L.slice()) : L.filter(fcIsDue);
+    const list = all ? pick : pick.filter((c) => fcRec(c.id)).concat(pick.filter((c) => !fcRec(c.id)));
+    FS = { cid: ch.id, all: all, list: list.map((c) => c.id), i: 0, flip: false, ok: 0, ko: 0, again: {} };
+  }
+  const base = '#/cards/' + ch.id + (all ? '/all' : '');
+  const top = crumbs([['بطاقات المراجعة', '#/cards'], ['CH ' + ch.id + ' · ' + esc(ch.ar)]]) +
+    '<header class="qhead"><div><p class="kick">FLASHCARDS · <span class="lat">' + esc(ch.en) + '</span></p><h1>' + (all ? 'كل البطاقات' : 'بطاقات اليوم') + '</h1></div>' +
+    '<div class="qscore"><span>عرفتها <b class="lat okc">' + FS.ok + '</b></span><span>لم أعرفها <b class="lat koc">' + FS.ko + '</b></span></div></header>';
+  const n = FS.list.length;
+  if (!n || FS.i >= n) {
+    const next = L.map((c) => fcRec(c.id)).filter(Boolean).map((x) => x.due).filter((d) => d > now()).sort((a, b) => a - b)[0];
+    VIEW.innerHTML = '<div class="wrap narrow fcw" style="--c:var(--c' + ch.id + ')">' + top +
+      (n ? '<div class="qsum card ' + (FS.ok >= FS.ko ? 'pass' : 'fail') + '"><div><small>انتهت الجلسة</small><b class="lat">' + FS.ok + ' ✓</b><span class="lat">' + FS.ko + ' ✗</span></div><p>البطاقات التي عرفتها ستعود إليك لاحقاً حسب جدول المراجعة.' + (next ? ' أقرب موعد: <b class="lat">' + new Date(next).toLocaleDateString('fr-DZ') + '</b>.' : '') + '</p>'
+        : '<div class="empty card"><b>لا توجد بطاقات للمراجعة الآن 🎉</b><p>' + (next ? 'أقرب موعد: <b class="lat">' + new Date(next).toLocaleDateString('fr-DZ') + '</b>.' : '') + '</p>') +
+      '<p class="acts"><a class="btn pri" href="#/cards/' + ch.id + '/all">راجع كل البطاقات</a><button type="button" class="btn" data-fc="again">جلسة جديدة</button><a class="btn" href="#/cards">رجوع</a></p></div></div>';
+    return;
+  }
+  const c = byId[FS.list[FS.i]];
+  if (!c) { FS.i++; deck(ch, all); return; }
+  const x = fcRec(c.id);
+  const lvl = '<span class="flvl" title="مستوى الحفظ">' + [1, 2, 3, 4, 5].map((k) => '<i class="' + (x && x.b >= k ? 'on' : '') + '"></i>').join('') + '</span>';
+  VIEW.innerHTML = '<div class="wrap narrow fcw" style="--c:var(--c' + ch.id + ')">' + top +
+    '<div class="rbar"><i style="width:' + pct(FS.i, n) + '%;background:var(--c' + ch.id + ')"></i></div>' +
+    '<p class="fcpos">البطاقة <b class="lat">' + (FS.i + 1) + '</b> من <b class="lat">' + n + '</b>' + (x ? '' : ' · <span class="fnew">جديدة</span>') + lvl + '</p>' +
+    '<div class="fcard' + (FS.flip ? ' flip' : '') + '" data-fc="flip" role="button" tabindex="0" aria-label="اقلب البطاقة"><div class="fcin">' +
+    '<div class="fface front"><small class="fsec lat">' + esc(c.s || '') + '</small><p class="fq" dir="ltr">' + cardText(c.f) + '</p>' + (c.fa ? '<p class="fqa" dir="rtl">' + cardText(c.fa) + '</p>' : '') + '<em class="fhint">اضغط لقلب البطاقة</em></div>' +
+    '<div class="fface back"><small class="fsec">الجواب</small><p class="fq" dir="ltr">' + cardText(c.b) + '</p>' + (c.ba ? '<p class="fqa" dir="rtl">' + cardText(c.ba) + '</p>' : '') + '</div>' +
+    '</div></div>' +
+    '<div class="fcact">' + (FS.flip ? '<button type="button" class="btn fno" data-fc="no">✗ لم أعرفها</button><button type="button" class="btn fyes" data-fc="yes">✓ عرفتها</button>' : '<button type="button" class="btn pri" data-fc="flip">اقلب البطاقة</button>') + '</div>' +
+    '<p class="kbd lat" dir="ltr">Space · 1 ✗ · 2 ✓</p></div>';
+  hydrate();
+}
+function fcFlip() { if (!FS) return; FS.flip = !FS.flip; const el = $('.fcard'); if (el) { el.classList.toggle('flip', FS.flip); const a = $('.fcact'); if (a) a.innerHTML = FS.flip ? '<button type="button" class="btn fno" data-fc="no">✗ لم أعرفها</button><button type="button" class="btn fyes" data-fc="yes">✓ عرفتها</button>' : '<button type="button" class="btn pri" data-fc="flip">اقلب البطاقة</button>'; } }
+function fcRate(ok) {
+  if (!FS || !FS.flip) return;
+  const id = FS.list[FS.i]; if (!id) return;
+  const x = fcRec(id), b = ok ? Math.min(5, ((x && x.b) || 0) + 1) : 0;
+  prog.fc[id] = { b: b, due: ok ? startOfDay(now()) + FC_DAYS[b] * DAY : now(), t: now() };
+  if (!ok && !FS.again[id]) { FS.again[id] = 1; FS.list.push(id); }
+  if (ok) FS.ok++; else FS.ko++;
+  FS.i++; FS.flip = false; save();
+  router(); window.scrollTo(0, 0);
 }
 
 /* =================================================================
@@ -997,7 +1099,7 @@ document.addEventListener('click', async (e) => {
   if (a) {
     const act = a.dataset.act;
     if (act === 'login') { try { await signIn(); } catch (err) { if (!(err && err.code === 'auth/popup-closed-by-user')) gLogin(friendly(err)); } }
-    else if (act === 'logout') { if (pushTimer) await push(); clearInterval(tick); quizSel = {}; revRes = {}; revLists = {}; IDX = null; Object.keys(TXT).forEach((k) => delete TXT[k]); wmUrl = ''; ready = false; cloud = 'off'; await signOutUser(); }
+    else if (act === 'logout') { if (pushTimer) await push(); clearInterval(tick); quizSel = {}; revRes = {}; revLists = {}; IDX = null; Object.keys(TXT).forEach((k) => delete TXT[k]); Object.keys(FCD).forEach((k) => delete FCD[k]); Object.keys(FCARDS).forEach((k) => delete FCARDS[k]); FS = null; wmUrl = ''; ready = false; cloud = 'off'; await signOutUser(); }
     else if (act === 'request') { a.disabled = true; try { await sendRequest(me); gPending(me); } catch (err) { gError(friendly(err)); } }
     else if (act === 'recheck') onUser(me);
     else if (act === 'install' && installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch (e2) {} installEvt = null; renderUser(); }
@@ -1020,6 +1122,13 @@ document.addEventListener('click', async (e) => {
   }
   const o = t.closest('[data-opt]');
   if (o && !o.disabled && !t.closest('figure.zoomable.ok')) { toggleOpt(o.dataset.opt); return; }
+  const fc = t.closest('[data-fc]');
+  if (fc) {
+    const a2 = fc.dataset.fc;
+    if (a2 === 'flip') fcFlip(); else if (a2 === 'yes') fcRate(true); else if (a2 === 'no') fcRate(false);
+    else if (a2 === 'again') { FS = null; router(); }
+    return;
+  }
   const qb = t.closest('[data-q]');
   if (qb) {
     const cmd = qb.dataset.q;
@@ -1067,6 +1176,11 @@ document.addEventListener('keydown', (e) => {
   if (!$('#viewer').hidden) { if (k === 'escape') closeViewer(); else if (k === '+' || k === '=') { vz = Math.min(ZL.length - 1, vz + 1); layoutViewer(); } else if (k === '-') { vz = Math.max(0, vz - 1); layoutViewer(); } return; }
   if (!ready || typing) return;
   if (k === '/') { go('#/search'); e.preventDefault(); return; }
+  if (FS && parse().v === 'deck') {
+    if (k === ' ' || k === 'enter') { if ((e.target.tagName || '') === 'BUTTON') return; fcFlip(); e.preventDefault(); return; }
+    if (k === '1') { fcRate(false); e.preventDefault(); return; }
+    if (k === '2') { fcRate(true); e.preventDefault(); return; }
+  }
   if (CUR) {
     if (/^[a-f]$/.test(k)) { toggleOpt(k.toUpperCase()); e.preventDefault(); return; }
     if (k === 'enter') { const c = $('[data-q="check"]'); if (c && !c.disabled) { check(); e.preventDefault(); return; } const nq = $('[data-q="nextq"]'); if (nq) { advanceQ(false); e.preventDefault(); } return; }

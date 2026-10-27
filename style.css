@@ -625,3 +625,90 @@ html[data-theme="dark"] mark{background:#5c4b00}
   .orow{padding:10px 11px;gap:10px}
   .stem{font-size:16px}
 }
+
+/* ---------- v7: رموز علمية + معادلات ---------- */
+.pre{display:inline-block;vertical-align:-0.38em;line-height:.98;font-size:.68em;text-align:right;margin-inline-end:1px;direction:ltr;unicode-bidi:isolate}
+.pre sup.p,.pre sub.p{display:block;position:static;vertical-align:baseline;font-size:1em;line-height:.98}
+.katex{direction:ltr;unicode-bidi:isolate;font-size:1.05em}
+.katex-display{direction:ltr;overflow-x:auto;overflow-y:hidden;padding:2px 0}
+[dir="rtl"] .katex{display:inline-block}
+
+/* ---------- v7: خمس أدوات في الرئيسية ---------- */
+.tools.five{grid-template-columns:repeat(5,1fr)}
+@media (max-width:1250px){.tools.five{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:980px){.tools.five{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.tools.five{grid-template-columns:1fr}}
+.tool.cards i{background:#7a4fd0}
+.tile.fct{border-color:#7a4fd0;background:linear-gradient(135deg,color-mix(in srgb,#7a4fd0 9%,var(--card)),var(--card))}
+
+/* ---------- v7: بطاقات المراجعة ---------- */
+.fclist{display:grid;gap:12px}
+.fcrow{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"n t a" "n s s" "n b b";gap:6px 14px;align-items:center;padding:16px 18px;border-inline-start:4px solid var(--c)}
+.fcrow .cnum{grid-area:n;align-self:start}
+.fcrow .mt{grid-area:t;display:flex;flex-direction:column}
+.fcrow .mt small{color:var(--mut)}
+.fcrow .fcst{grid-area:s;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--mut)}
+.fcrow .fcst b{color:var(--ink);font-size:14.5px;margin-inline-end:3px}
+.fcrow .fcst .due b{color:#7a4fd0}
+.fcrow .pbar{grid-area:b}
+.fcrow .fca{grid-area:a;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:640px){.fcrow{grid-template-columns:auto 1fr;grid-template-areas:"n t" "n s" "n b" "a a"}.fcrow .fca{justify-content:flex-start}}
+.fcw .qhead{margin-bottom:10px}
+.fcpos{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--mut);font-size:13.5px;margin:12px 0}
+.fnew{background:#efe7fd;color:#6a3fc4;border-radius:999px;padding:0 9px;font-weight:700;font-size:12px}
+.flvl{display:inline-flex;gap:3px;margin-inline-start:auto}
+.flvl i{width:16px;height:6px;border-radius:3px;background:var(--track)}
+.flvl i.on{background:var(--ok)}
+.fcard{display:block;width:100%;perspective:1400px;cursor:pointer;outline:none;border-radius:20px}
+.fcard:focus-visible{box-shadow:0 0 0 3px var(--cyan)}
+.fcin{display:grid;transition:transform .55s cubic-bezier(.3,.7,.3,1);transform-style:preserve-3d}
+.fcard.flip .fcin{transform:rotateY(180deg)}
+.fface{grid-area:1/1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:10px;min-height:280px;padding:34px 28px 30px;border-radius:20px;background:var(--card);box-shadow:var(--sh);border-top:5px solid var(--c);text-align:center;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+.fface.back{transform:rotateY(180deg);background:linear-gradient(160deg,color-mix(in srgb,var(--c) 8%,var(--card)),var(--card));border-top-color:var(--ok)}
+.fsec{position:absolute;top:12px;inset-inline-start:16px;font-size:11.5px;font-weight:700;color:var(--c);background:color-mix(in srgb,var(--c) 10%,transparent);border-radius:999px;padding:1px 10px}
+.fface{position:relative}
+.back .fsec{color:var(--ok);background:var(--okbg)}
+.fq{margin:0;font:600 20px/1.55 var(--fl);color:var(--ink);max-width:640px}
+.back .fq{font-size:17.5px;font-weight:500}
+.fqa{margin:0;font-size:15.5px;color:var(--mut);max-width:620px}
+.fhint{font-style:normal;font-size:12px;color:var(--mut);opacity:.75;margin-top:8px}
+.fcact{display:flex;justify-content:center;gap:12px;margin:16px 0 4px;flex-wrap:wrap}
+.fcact .btn{min-width:160px;min-height:48px;font-size:15.5px}
+.btn.fyes{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.fno{background:var(--kobg);border-color:color-mix(in srgb,var(--ko) 35%,transparent);color:var(--ko)}
+@media (max-width:560px){.fq{font-size:17.5px}.back .fq{font-size:16px}.fface{min-height:240px;padding:34px 18px 24px}.fcact .btn{min-width:0;flex:1}}
+html[data-theme="dark"] .fnew{background:#2a1d4a;color:#c3a8ff}
+
+/* ---------- v7: محرّر الإدارة ---------- */
+.edsel{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 12px}
+.edsel select,.edsel .input{min-height:42px}
+select.input{padding:0 10px}
+.edtool{position:sticky;top:calc(var(--top) + 4px);z-index:5;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px;margin:10px 0;border-radius:12px;background:var(--soft);border:1px solid var(--line)}
+.edtool button{min-width:38px;min-height:36px;border-radius:9px;border:1px solid var(--line);background:var(--card);font-weight:800;cursor:pointer}
+.edtool button:hover{background:var(--hov)}
+.edtool .sp{flex:1}
+.ed [contenteditable="true"],.ed textarea,.ed .input{-webkit-user-select:text;user-select:text}
+.ed [contenteditable="true"]{outline:none;border-radius:10px;transition:box-shadow .15s}
+.ed [contenteditable="true"]:focus{box-shadow:0 0 0 2px var(--cyan)}
+.edbox{min-height:44px;padding:10px 12px;border:1px solid var(--line);background:var(--card);line-height:1.7}
+.edlbl{display:block;font-size:12.5px;font-weight:700;color:var(--mut);margin:12px 0 4px}
+.edopt{display:grid;grid-template-columns:auto 1fr 1fr;gap:8px;align-items:stretch;margin-bottom:8px}
+.edopt .ok{display:flex;align-items:center;gap:6px;padding:0 10px;border:1px solid var(--line);border-radius:10px;font-weight:800;cursor:pointer;background:var(--card)}
+.edopt .ok input{width:18px;height:18px}
+.edopt .ok:has(input:checked){background:var(--okbg);border-color:var(--ok);color:var(--ok)}
+@media (max-width:700px){.edopt{grid-template-columns:1fr}}
+.edprev{margin-top:14px;padding:12px 14px;border:1px dashed var(--line);border-radius:12px;background:var(--hov)}
+.edprev>small{display:block;font-weight:700;color:var(--mut);margin-bottom:6px}
+.edlesson .lesson figure{pointer-events:none}
+.edcard{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:var(--card)}
+.edcard .r{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.edcard .r+.r{margin-top:8px}
+.edcard textarea{width:100%;min-height:58px;resize:vertical;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:14px/1.5 var(--fl)}
+.edcard .h{display:flex;gap:8px;align-items:center;margin-bottom:6px;font-size:12.5px;color:var(--mut)}
+.edcard .h .input{max-width:110px;min-height:32px}
+.edcard .h .btn{margin-inline-start:auto}
+@media (max-width:700px){.edcard .r{grid-template-columns:1fr}}
+.edsave{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px}
+.edsave .small{flex:1}
+.badge-ed{display:inline-block;font-size:11px;font-weight:800;color:#6a3fc4;background:#efe7fd;border-radius:999px;padding:0 8px;margin-inline-start:6px}
+html[data-theme="dark"] .theme.srch::before{content:none}

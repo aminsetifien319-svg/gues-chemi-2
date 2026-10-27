@@ -2,13 +2,14 @@
 import {
   watchUser, signIn, signOutUser, isAdminUser, listRequests, listAllowed,
   approve, reject, removeAllowed, addAllowed, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, configMissing
-} from './firebase.js?v=6';
+} from './firebase.js?v=7';
+import { mountEditor } from './editor.js?v=7';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const box = $('#box');
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-let me = null, note = '', busy = false;
+let me = null, note = '', busy = false, edMounted = false;
 
 function gate(inner) { box.innerHTML = '<div class="gate" style="min-height:60vh"><div class="card">' + inner + '</div></div>'; }
 
@@ -22,6 +23,7 @@ function li(it, kind) {
 async function render(u) {
   me = u;
   $('#out').hidden = !u;
+  if (!u) { const ed = $('#ed'); if (ed) { ed.hidden = true; ed.innerHTML = ''; } edMounted = false; }
   if (configMissing) { gate('<h1>الموقع غير مُهيّأ</h1><p>الصق إعدادات Firebase في الملف <b class="lat">firebase-config.js</b>.</p>'); return; }
   if (!u) { gate('<h1>لوحة الإدارة</h1><p>سجّل الدخول بحساب المشرف.</p><p class="acts" style="justify-content:center"><button type="button" class="btn pri" id="login">الدخول بحساب Google</button></p>'); return; }
   box.innerHTML = '<p>جارٍ التحقق…</p>';
@@ -31,6 +33,7 @@ async function render(u) {
       return;
     }
     await refresh();
+    if (!edMounted) { edMounted = true; mountEditor($('#ed')); }
   } catch (err) { gate('<h1>حدث خطأ</h1><p class="err">' + esc(err && err.message ? err.message : err) + '</p>'); }
 }
 
@@ -86,7 +89,7 @@ async function refresh() {
     (allowed.length ? '<ul class="list" id="alw">' + allowed.map((r) => li(r, 'alw')).join('') + '</ul>' : '<p class="small">لا يوجد طلبة مقبولون بعد.</p>') + '</div>' +
     progressCard(allowed, progress, devices) +
     '<div class="card"><h2>محتوى الموقع <small>Content</small></h2>' +
-    '<p class="small">اختر <b>كل</b> ملفات المحتوى معاً: <b class="lat">manifest.json</b> وملفات <b class="lat">pack-….json</b> (7 ملفات). ملاحظة: الصور التي رُفعت سابقاً من هذا المتصفح تُتخطّى تلقائياً. الرفع يستغرق بضع دقائق، وإن انقطع أعد الضغط على «رفع المحتوى» من نفس المتصفح وسيكمل من حيث توقف.</p>' +
+    '<p class="small">اختر <b>كل</b> ملفات المحتوى معاً: <b class="lat">manifest.json</b> وملفات <b class="lat">pack-….json</b> (7 ملفات). لإضافة بطاقات المراجعة وحدها اختر الملف <b class="lat">pack-cards.json</b> فقط. تعديلاتك من المحرّر تبقى محفوظة عند إعادة الرفع. ملاحظة: الصور التي رُفعت سابقاً من هذا المتصفح تُتخطّى تلقائياً. الرفع يستغرق بضع دقائق، وإن انقطع أعد الضغط على «رفع المحتوى» من نفس المتصفح وسيكمل من حيث توقف.</p>' +
     '<div class="row-form"><input class="input" id="file" type="file" accept="application/json,.json" multiple><button type="button" class="btn pri" id="upload">رفع المحتوى</button></div>' +
     '<div class="prog-up" id="up" hidden><span class="pbar"><i id="upbar" style="width:0%"></i></span><p class="small" id="uptxt"></p></div>' +
     '<p id="msg" class="' + (note.indexOf('✓') === 0 ? 'okmsg' : 'err') + '" role="status">' + esc(note) + '</p></div>';
@@ -106,7 +109,10 @@ async function upload(files) {
     else if (j && Array.isArray(j.chapters) && j.chapters[0] && j.chapters[0].lesson) throw new Error('هذا ملف content.json القديم، ولم يعد مستعملاً. اختر manifest.json وملفات pack.');
     else throw new Error('لم أتعرّف على الملف ' + f.name + '.');
   }
-  if (!manifest) throw new Error('لم تختر الملف manifest.json.');
+  if (!manifest) {
+    if (packs.length && packs.every((p) => p.patch)) return uploadPatch(packs);
+    throw new Error('لم تختر الملف manifest.json.');
+  }
   // تحقق أن كل صور الفهرس موجودة في الحزم المختارة (أو مرفوعة سابقاً)
   const need = new Set();
   manifest.overview.forEach((p) => need.add(p.img));
@@ -141,8 +147,45 @@ async function upload(files) {
   await Promise.all([worker(), worker(), worker(), worker()]);
   if (missing.length) throw new Error('صور ناقصة (' + missing.length + '): اختر كل ملفات pack ثم أعد الرفع. أول صورة ناقصة: ' + missing[0]);
   txt.textContent = 'جارٍ حفظ الفهرس…';
+  let cur = null; try { cur = await loadManifest(); } catch (e) {}
+  if (cur) keepEdits(manifest, cur);
   await uploadManifest(manifest);
   return { sent: sent, skipped: skipped, total: ids.length, ch: manifest.chapters.length };
+}
+// لا نفقد تعديلات المحرّر ولا البطاقات عند إعادة رفع نفس المحتوى
+function keepEdits(nm, cur) {
+  nm.chapters.forEach((nc) => {
+    const oc = (cur.chapters || []).find((x) => x.id === nc.id); if (!oc) return;
+    if (oc.textBase && oc.textBase === nc.text) { nc.text = oc.text; nc.textBase = oc.textBase; }
+    if (oc.flash && !nc.flash) { nc.flash = oc.flash; if (oc.flashBase) nc.flashBase = oc.flashBase; }
+  });
+  if (cur.fix) {
+    nm.fix = cur.fix;
+    const A = (cur.fix && cur.fix.ans) || {};
+    nm.chapters.forEach((c) => c.qcm.forEach((s) => s.q.forEach((q) => { const k = 'c' + c.id + s.key[0] + q.n; if (A[k]) q.ans = A[k]; })));
+  }
+}
+// حزمة إضافية (مثل البطاقات): ترفع ملفاتها ثم تُضاف إلى الفهرس الموجود
+async function uploadPatch(packs) {
+  const up = $('#up'), bar = $('#upbar'), txt = $('#uptxt');
+  const cur = await loadManifest();
+  if (!cur || !cur.chapters) throw new Error('ارفع المحتوى الأساسي أولاً (manifest.json وملفات pack)، ثم البطاقات.');
+  const docs = []; packs.forEach((p) => Object.keys(p.docs).forEach((k) => docs.push([k, p.docs[k]])));
+  up.hidden = false; let done = 0;
+  for (const [id, d] of docs) {
+    let tries = 0;
+    for (;;) { try { await uploadImage(id, d); break; } catch (e) { if (++tries >= 3) throw e; await new Promise((r) => setTimeout(r, 1500 * tries)); } }
+    done++; bar.style.width = Math.round(100 * done / docs.length) + '%'; txt.textContent = done + ' / ' + docs.length;
+  }
+  let n = 0;
+  packs.forEach((p) => Object.keys(p.patch).forEach((cid) => {
+    const c = cur.chapters.find((x) => String(x.id) === String(cid)); if (!c) return;
+    const P = p.patch[cid];
+    if (P.flash) { if (c.flashBase === P.flash) return; c.flash = P.flash; delete c.flashBase; n++; }
+  }));
+  txt.textContent = 'جارٍ حفظ الفهرس…';
+  await uploadManifest(cur);
+  return { patch: true, total: docs.length, ch: n };
 }
 
 let armed = null, armTimer = 0;
@@ -164,7 +207,8 @@ document.addEventListener('click', async (e) => {
     busy = true; t.disabled = true; msg.className = ''; msg.textContent = 'جارٍ قراءة الملفات… لا تغلق الصفحة.';
     try {
       const r = await upload(files);
-      msg.className = 'okmsg'; msg.textContent = '✓ اكتمل: ' + r.ch + ' شابيطرات، ' + r.total + ' صورة (رُفع ' + r.sent + '، موجود مسبقاً ' + r.skipped + ').';
+      msg.className = 'okmsg'; msg.textContent = r.patch ? '✓ اكتمل: أضيفت بطاقات المراجعة إلى ' + r.ch + ' شابيطرات (' + r.total + ' ملفات).' : '✓ اكتمل: ' + r.ch + ' شابيطرات، ' + r.total + ' صورة (رُفع ' + r.sent + '، موجود مسبقاً ' + r.skipped + ').';
+      if (edMounted) mountEditor($('#ed'));
     } catch (err) { msg.className = 'err'; msg.textContent = (err && err.message) || String(err); }
     busy = false; t.disabled = false; return;
   }

@@ -5,7 +5,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache,
-  doc, getDoc, getDocFromCache, getDocFromServer, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch
+  doc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
 
@@ -17,9 +17,10 @@ if (!configMissing) {
   auth = getAuth(app);
   // نخزّن الصور في ذاكرة المتصفح بعد أول تحميل حتى لا تُحمَّل كل مرة (أسرع وأوفر).
   try {
-    db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+    // اكتشاف تلقائي للاتصال البديل (long polling) للمتصفحات والشبكات التي تحجب الاتصال المستمر (مثل متصفحات الفلترة).
+    db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }), experimentalAutoDetectLongPolling: true });
   } catch (e) {
-    db = initializeFirestore(app, { localCache: memoryLocalCache() });
+    db = initializeFirestore(app, { localCache: memoryLocalCache(), experimentalAutoDetectLongPolling: true });
   }
 }
 
@@ -70,9 +71,20 @@ export async function sendRequest(user) {
 /* ---------- المحتوى ---------- */
 // الفهرس صغير ويُقرأ من الخادم دائماً حتى يظهر أي تحديث فوراً.
 export async function loadManifest() {
-  const s = await getDocFromServer(doc(db, 'content', 'manifest')).catch(() => getDoc(doc(db, 'content', 'manifest')));
+  const ref = doc(db, 'content', 'manifest');
+  // من الخادم دائماً (مع محاولة ثانية)، ولا نرجع للنسخة المحفوظة إلا دون إنترنت.
+  const s = await getDocFromServer(ref)
+    .catch(() => new Promise((r) => setTimeout(r, 1500)).then(() => getDocFromServer(ref)))
+    .catch(() => getDoc(ref));
   if (!s.exists()) return null;
   return JSON.parse(s.data().json);
+}
+
+// مراقبة الفهرس مباشرة: أي تعديل من المشرف يصل للطلبة دون إعادة فتح الموقع.
+export function watchManifest(cb) {
+  try {
+    return onSnapshot(doc(db, 'content', 'manifest'), (s) => { if (s.exists() && !s.metadata.fromCache) { try { cb(JSON.parse(s.data().json)); } catch (e) {} } }, () => {});
+  } catch (e) { return () => {}; }
 }
 
 // الصور ثابتة (رقم النسخة داخل المعرّف)، فنقرؤها من ذاكرة المتصفح أولاً.

@@ -1,9 +1,9 @@
 // Gues Chemi: دخول Google ← القبول ← حد الأجهزة ← الدروس نصاً، الكيسيام، الامتحان التجريبي، المراجعة، البحث، التقدّم.
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
-  loadProgress, saveProgress, getDevices, addDevice, configMissing
-} from './firebase.js?v=7';
-import { fmt, typeset } from './rich.js?v=7';
+  loadProgress, saveProgress, getDevices, addDevice, watchManifest, configMissing
+} from './firebase.js?v=10';
+import { fmt, typeset } from './rich.js?v=10';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -180,6 +180,41 @@ window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); inst
 window.addEventListener('appinstalled', () => { installEvt = null; renderUser(); });
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
+/* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
+const APP_V = 10;
+async function checkUpdate(boot) {
+  let j = null;
+  try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
+  if (!j || !(j.v > APP_V)) return;
+  let tried = 0; try { tried = +sessionStorage.getItem('gueschemi.upd') || 0; } catch (e) {}
+  if ((boot || !ready || safeNow()) && tried < j.v) { try { sessionStorage.setItem('gueschemi.upd', String(j.v)); } catch (e) {} if (pushTimer) { try { await push(); } catch (e) {} } location.reload(); return; }
+  updPending = tried < j.v;
+  if (!$('#updbar')) document.body.insertAdjacentHTML('beforeend', '<div class="updbar" id="updbar" role="status"><span>نسخة جديدة من الموقع متاحة</span><button type="button" class="btn sm pri" data-act="update">تحديث الآن</button></div>');
+}
+// الوقت الآمن للتحديث: لا امتحان جارٍ، لا إجابة مختارة لم تُتحقق، لا جلسة بطاقات، لا كتابة
+let updPending = false, pendingM = null, unwatch = null, MJ = '';
+function safeNow() {
+  if (!ready) return true;
+  if (prog && prog.exam) return false;
+  if (Object.keys(quizSel).some((k) => quizSel[k] && quizSel[k].length)) return false;
+  if (FS && parse().v === 'deck' && FS.i > 0 && FS.i < FS.list.length) return false;
+  const a = document.activeElement; if (a && /input|textarea|select/i.test(a.tagName || '')) return false;
+  return true;
+}
+function applyManifest(nm) {
+  M = nm; MJ = JSON.stringify(nm);
+  Object.keys(TXT).forEach((k) => delete TXT[k]); Object.keys(FCD).forEach((k) => delete FCD[k]); Object.keys(FCARDS).forEach((k) => delete FCARDS[k]); IDX = null;
+  const y = window.scrollY; start(null); window.scrollTo(0, y);
+}
+function onManifest(nm) {
+  if (!ready || !nm || !nm.chapters || !nm.chapters.length) return;
+  if (JSON.stringify(nm) === MJ) return;
+  if (safeNow()) applyManifest(nm); else pendingM = nm;
+}
+checkUpdate(true);
+setInterval(() => checkUpdate(false), 5 * 60000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(false); });
+
 /* ---------- الجهاز ---------- */
 function deviceId() {
   let id = '';
@@ -220,6 +255,8 @@ async function onUser(u) {
       isAdmin = (acc === 'admin');
       if (!isAdmin) { const dv = await checkDevice(); if (!dv.ok) return gDevices(dv.d); }
       M = await loadManifest();
+      MJ = JSON.stringify(M || {});
+      if (!unwatch) unwatch = watchManifest(onManifest);
       if (!M || !M.chapters || !M.chapters.length) {
         renderUser();
         return gError(isAdmin ? 'لم يُرفع المحتوى بعد. افتح صفحة الإدارة وارفع ملفات المحتوى.' : 'المحتوى غير متاح حالياً، حاول لاحقاً.',
@@ -289,6 +326,9 @@ function parse() {
 function router() {
   if (!ready) return;
   const r = parse();
+  if (r.v !== 'deck') FS = null;
+  if (updPending && safeNow()) { updPending = false; if (pushTimer) push(); location.reload(); return; }
+  if (pendingM && safeNow()) { const nm = pendingM; pendingM = null; applyManifest(nm); return; }
   CUR = null; renderId++;
   if (r.v === 'home') home();
   else if (r.v === 'stats') stats();
@@ -1099,9 +1139,10 @@ document.addEventListener('click', async (e) => {
   if (a) {
     const act = a.dataset.act;
     if (act === 'login') { try { await signIn(); } catch (err) { if (!(err && err.code === 'auth/popup-closed-by-user')) gLogin(friendly(err)); } }
-    else if (act === 'logout') { if (pushTimer) await push(); clearInterval(tick); quizSel = {}; revRes = {}; revLists = {}; IDX = null; Object.keys(TXT).forEach((k) => delete TXT[k]); Object.keys(FCD).forEach((k) => delete FCD[k]); Object.keys(FCARDS).forEach((k) => delete FCARDS[k]); FS = null; wmUrl = ''; ready = false; cloud = 'off'; await signOutUser(); }
+    else if (act === 'logout') { if (unwatch) { unwatch(); unwatch = null; } pendingM = null; if (pushTimer) await push(); clearInterval(tick); quizSel = {}; revRes = {}; revLists = {}; IDX = null; Object.keys(TXT).forEach((k) => delete TXT[k]); Object.keys(FCD).forEach((k) => delete FCD[k]); Object.keys(FCARDS).forEach((k) => delete FCARDS[k]); FS = null; wmUrl = ''; ready = false; cloud = 'off'; await signOutUser(); }
     else if (act === 'request') { a.disabled = true; try { await sendRequest(me); gPending(me); } catch (err) { gError(friendly(err)); } }
     else if (act === 'recheck') onUser(me);
+    else if (act === 'update') { a.disabled = true; try { if (pushTimer) await push(); } catch (e2) {} location.reload(); }
     else if (act === 'install' && installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch (e2) {} installEvt = null; renderUser(); }
     return;
   }

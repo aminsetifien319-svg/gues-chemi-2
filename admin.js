@@ -2,7 +2,7 @@
 import {
   watchUser, signIn, signOutUser, isAdminUser, listRequests, listAllowed,
   approve, reject, removeAllowed, addAllowed, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, configMissing
-} from './firebase.js';
+} from './firebase.js?v=6';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const box = $('#box');
@@ -112,6 +112,8 @@ async function upload(files) {
   manifest.overview.forEach((p) => need.add(p.img));
   manifest.chapters.forEach((c) => { need.add(c.cover); if (c.text) need.add(c.text); c.sections.forEach((s) => s.pages.forEach((p) => need.add(p.img))); c.revision.forEach((p) => need.add(p.img)); c.qcm.forEach((s) => s.q.forEach((q) => { need.add(q.q); need.add(q.s); })); });
   const all = new Map(); packs.forEach((p) => Object.keys(p.docs).forEach((k) => all.set(k, p.docs[k])));
+  // كل ما في الحزم (صور الصفحات + الصور التوضيحية داخل النص + ملفات النص) + ما يذكره الفهرس
+  all.forEach((v, k) => need.add(k));
   const ids = Array.from(need);
   up.hidden = false;
   let done = 0, sent = 0, skipped = 0; const missing = [];

@@ -2,7 +2,7 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, configMissing
-} from './firebase.js';
+} from './firebase.js?v=6';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -530,11 +530,10 @@ function qscreen(ctx) {
   const prevB = i > 0 && !(ctx.noPrev) ? '<a class="btn" data-nav="prev" href="' + ctx.href(i - 1) + '">→ السابق</a>' : '<span></span>';
   const nextB = ctx.nextBtn ? ctx.nextBtn(i) : (i < keys.length - 1 ? '<a class="btn' + (r || live ? ' pri' : '') + '" data-nav="next" href="' + ctx.href(i + 1) + '">التالي ←</a>' : (ctx.end || '<span></span>'));
   const mid = mode === 'practice' && r ? '<button type="button" class="btn ghost2" data-q="retry">أعد هذا السؤال</button>' : '<span></span>';
-  const textMode = viewMode !== 'orig' && it.ch.text;
+  const textMode = !!it.ch.text;   // الأسئلة دائماً مكتوبة (الصورة تُستعمل فقط إن تعذّر النص)
   VIEW.innerHTML = '<div class="wrap quiz' + (live ? ' live' : '') + '" style="--c:var(--c' + (mode === 'practice' ? it.ch.id : 0) + ',var(--cyan2))">' + ctx.top +
     '<div class="qchips" aria-label="الأسئلة">' + chips + '</div>' +
     '<article class="qcard"><div class="qtop"><span class="qn">السؤال <b class="lat">' + (i + 1) + '</b> من <b class="lat">' + keys.length + '</b></span>' + src + years + (ctx.qtimer || '') + star(key) + '</div>' +
-    '<div class="rtools">' + modeSwitch('q') + '</div>' +
     '<div id="qbody">' + (textMode ? loading : fig(q.q, 'qimg zoomable', '9 / 4') + '<p class="zhint">اضغط على السؤال لتكبيره</p>') + '</div>' +
     '<div class="opick"><p>' + (r ? 'إجابتك:' : live ? 'اختر الإجابة أو الإجابات (تُحفظ تلقائياً، والتصحيح بعد التسليم):' : 'اختر الإجابة أو الإجابات الصحيحة (قد تكون أكثر من واحدة):') + '</p>' + (textMode ? '' : letterRow(q, sel, r, locked)) + action + '</div>' +
     verdict + (r ? '<div class="sol"><p class="solh">الحل والشرح</p><div id="sbody">' + (textMode ? loading : fig(q.s, 'simg zoomable', '9 / 3')) + '</div></div>' : '') +

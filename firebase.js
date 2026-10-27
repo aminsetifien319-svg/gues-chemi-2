@@ -70,8 +70,8 @@ export async function sendRequest(user) {
 
 /* ---------- المحتوى ---------- */
 // الفهرس صغير ويُقرأ من الخادم دائماً حتى يظهر أي تحديث فوراً.
-export async function loadManifest() {
-  const ref = doc(db, 'content', 'manifest');
+export async function loadManifest(id) {
+  const ref = doc(db, 'content', id || 'manifest');
   // من الخادم دائماً (مع محاولة ثانية)، ولا نرجع للنسخة المحفوظة إلا دون إنترنت.
   const s = await getDocFromServer(ref)
     .catch(() => new Promise((r) => setTimeout(r, 1500)).then(() => getDocFromServer(ref)))
@@ -81,9 +81,9 @@ export async function loadManifest() {
 }
 
 // مراقبة الفهرس مباشرة: أي تعديل من المشرف يصل للطلبة دون إعادة فتح الموقع.
-export function watchManifest(cb) {
+export function watchManifest(cb, id) {
   try {
-    return onSnapshot(doc(db, 'content', 'manifest'), (s) => { if (s.exists() && !s.metadata.fromCache) { try { cb(JSON.parse(s.data().json)); } catch (e) {} } }, () => {});
+    return onSnapshot(doc(db, 'content', id || 'manifest'), (s) => { if (s.exists() && !s.metadata.fromCache) { try { cb(JSON.parse(s.data().json)); } catch (e) {} } }, () => {});
   } catch (e) { return () => {}; }
 }
 
@@ -171,8 +171,21 @@ export async function uploadImage(id, data) {
   await setDoc(doc(db, 'content', 'img_' + id), { d: data });
 }
 
-export async function uploadManifest(manifest) {
+export async function uploadManifest(manifest, id) {
   const json = JSON.stringify(manifest);
   if (json.length > 900000) throw new Error('الفهرس كبير جداً.');
-  await setDoc(doc(db, 'content', 'manifest'), { json: json, updatedAt: serverTimestamp() });
+  await setDoc(doc(db, 'content', id || 'manifest'), { json: json, updatedAt: serverTimestamp() });
+}
+
+/* ---------- المواد (الكيمياء العامة، العضوية، …) ---------- */
+export const DEFAULT_SUBJECTS = [{ key: 'gen', doc: 'manifest', en: 'General Chemistry', ar: 'الكيمياء العامة' }];
+export async function loadSubjects() {
+  const ref = doc(db, 'content', 'subjects');
+  let s = null;
+  try { s = await getDocFromServer(ref); } catch (e) { try { s = await getDoc(ref); } catch (e2) { s = null; } }
+  if (!s || !s.exists()) return DEFAULT_SUBJECTS.slice();
+  try { const L = JSON.parse(s.data().json); return Array.isArray(L) && L.length ? L : DEFAULT_SUBJECTS.slice(); } catch (e) { return DEFAULT_SUBJECTS.slice(); }
+}
+export async function saveSubjects(list) {
+  await setDoc(doc(db, 'content', 'subjects'), { json: JSON.stringify(list), updatedAt: serverTimestamp() });
 }

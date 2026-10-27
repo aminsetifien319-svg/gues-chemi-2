@@ -1,9 +1,9 @@
 // Gues Chemi: دخول Google ← القبول ← حد الأجهزة ← الدروس نصاً، الكيسيام، الامتحان التجريبي، المراجعة، البحث، التقدّم.
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
-  loadProgress, saveProgress, getDevices, addDevice, watchManifest, configMissing
-} from './firebase.js?v=10';
-import { fmt, typeset } from './rich.js?v=10';
+  loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
+} from './firebase.js?v=11';
+import { fmt, typeset } from './rich.js?v=11';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -21,6 +21,7 @@ const PERQ = [30, 60, 90, 120, 150, 180, 240, 300];                 // seconds p
 let me = null, isAdmin = false, M = null, prog = null, KEY = '', ready = false;
 let FLOW = {}, ITEMS = {}, SETKEYS = {};
 let quizSel = {}, revRes = {}, revLists = {};
+let SUBJ = [], MS = {}, CURS = '', MJS = {};
 let CUR = null, cloud = 'off', pushTimer = 0, tick = 0, installEvt = null, renderId = 0;
 const TXT = {};
 let viewMode = 'text';
@@ -29,6 +30,19 @@ try { viewMode = localStorage.getItem('gueschemi.view') === 'orig' ? 'orig' : 't
 /* =================================================================
    التقدّم: محفوظ في المتصفح + في حساب الطالب
    ================================================================= */
+const cn = (ch) => (ch && (ch.num || ch.id)) || '';
+const allCh = () => SUBJ.reduce((a, x) => a.concat(MS[x.key] ? MS[x.key].chapters : []), []);
+const chById = (id) => allCh().find((c) => c.id === id) || { id: id };
+const inS = (k) => !!(ITEMS[k] && ITEMS[k].ch.sub === CURS);
+const subj = (key) => SUBJ.find((x) => x.key === (key || CURS)) || { key: '', en: 'General Chemistry', ar: 'الكيمياء العامة' };
+function setSubject(key) {
+  if (!MS[key] || (key === CURS && M === MS[key])) return;
+  CURS = key; M = MS[key];
+  try { localStorage.setItem('gueschemi.subject', key); } catch (e) {}
+  IDX = null; exForm = null; revLists = {}; revRes = {};
+  const sm = $('.brand small'); if (sm) sm.textContent = subj().en + ' · 1st-year Pharmacy';
+  M.chapters.forEach((ch) => { chText(ch).catch(() => {}); chFlash(ch).catch(() => {}); });
+}
 function blank() { return { v: 4, r: {}, a: {}, f: {}, sr: {}, fc: {}, last: '', lastT: 0, exam: null, hist: [] }; }
 function upgrade(p) {
   if (!p || typeof p !== 'object') return blank();
@@ -98,7 +112,7 @@ function setRes(key, s, reviewing) {
   return ok;
 }
 function clearRes(key) { if (prog.a[key]) prog.a[key] = { d: 1, t: now() }; }
-const dueKeys = () => Object.keys(prog.sr).filter((k) => ITEMS[k] && prog.sr[k] && !prog.sr[k].done && prog.sr[k].due <= now());
+const dueKeys = () => Object.keys(prog.sr).filter((k) => inS(k) && prog.sr[k] && !prog.sr[k].done && prog.sr[k].due <= now());
 const readP = (n) => !!prog.r[n];
 const sk = (cid, kind) => 'c' + cid + kind[0];
 function chStats(ch) {
@@ -107,8 +121,8 @@ function chStats(ch) {
   ch.qcm.forEach((set) => SETKEYS[sk(ch.id, set.key)].forEach((k) => { qn++; const x = res(k); if (x) { qa++; if (x.ok) qok++; } }));
   return { pages: pages.length, read: read, qn: qn, qa: qa, qok: qok };
 }
-const wrongKeys = (cid) => Object.keys(ITEMS).filter((k) => (!cid || ITEMS[k].ch.id === cid) && res(k) && !res(k).ok);
-const favKeys = () => Object.keys(ITEMS).filter((k) => isFav(k));
+const wrongKeys = (cid) => Object.keys(ITEMS).filter((k) => (cid ? ITEMS[k].ch.id === cid : inS(k)) && res(k) && !res(k).ok);
+const favKeys = () => Object.keys(ITEMS).filter((k) => inS(k) && isFav(k));
 const favPages = () => { const out = []; M.chapters.forEach((ch) => FLOW[ch.id].forEach((p) => { if (isFav('p' + p.n)) out.push({ ch: ch, p: p }); })); return out; };
 
 /* =================================================================
@@ -139,7 +153,7 @@ function gate(inner) {
 const acts = (a) => '<p class="acts">' + a + '</p>';
 function gLogin(msg) {
   if (configMissing) return gate('<h1>الموقع غير مُهيّأ بعد</h1><p>الصق إعدادات Firebase في الملف <b class="lat">firebase-config.js</b>.</p>');
-  gate('<h1>الكيمياء العامة · السنة الأولى صيدلة</h1><p>الدروس والكيسيام متاحة للطلبة المقبولين فقط. سجّل الدخول بحساب Google.</p>' +
+  gate('<h1>الكيمياء العامة والعضوية · السنة الأولى صيدلة</h1><p>الدروس والكيسيام متاحة للطلبة المقبولين فقط. سجّل الدخول بحساب Google.</p>' +
     (msg ? '<p class="err" role="alert">' + esc(msg) + '</p>' : '') +
     acts('<button type="button" class="btn pri g" data-act="login"><svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>الدخول بحساب Google</button>'));
 }
@@ -181,7 +195,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 10;
+const APP_V = 11;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -192,7 +206,7 @@ async function checkUpdate(boot) {
   if (!$('#updbar')) document.body.insertAdjacentHTML('beforeend', '<div class="updbar" id="updbar" role="status"><span>نسخة جديدة من الموقع متاحة</span><button type="button" class="btn sm pri" data-act="update">تحديث الآن</button></div>');
 }
 // الوقت الآمن للتحديث: لا امتحان جارٍ، لا إجابة مختارة لم تُتحقق، لا جلسة بطاقات، لا كتابة
-let updPending = false, pendingM = null, unwatch = null, MJ = '';
+let updPending = false, pendingM = null, unwatch = null;
 function safeNow() {
   if (!ready) return true;
   if (prog && prog.exam) return false;
@@ -201,15 +215,15 @@ function safeNow() {
   const a = document.activeElement; if (a && /input|textarea|select/i.test(a.tagName || '')) return false;
   return true;
 }
-function applyManifest(nm) {
-  M = nm; MJ = JSON.stringify(nm);
+function applyManifest(key, nm) {
+  MS[key] = nm; MJS[key] = JSON.stringify(nm); if (key === CURS) M = nm;
   Object.keys(TXT).forEach((k) => delete TXT[k]); Object.keys(FCD).forEach((k) => delete FCD[k]); Object.keys(FCARDS).forEach((k) => delete FCARDS[k]); IDX = null;
   const y = window.scrollY; start(null); window.scrollTo(0, y);
 }
-function onManifest(nm) {
+function onManifest(key, nm) {
   if (!ready || !nm || !nm.chapters || !nm.chapters.length) return;
-  if (JSON.stringify(nm) === MJ) return;
-  if (safeNow()) applyManifest(nm); else pendingM = nm;
+  if (JSON.stringify(nm) === MJS[key]) return;
+  if (safeNow()) applyManifest(key, nm); else pendingM = { key: key, nm: nm };
 }
 checkUpdate(true);
 setInterval(() => checkUpdate(false), 5 * 60000);
@@ -254,9 +268,16 @@ async function onUser(u) {
     if (acc === 'admin' || acc === 'allowed') {
       isAdmin = (acc === 'admin');
       if (!isAdmin) { const dv = await checkDevice(); if (!dv.ok) return gDevices(dv.d); }
-      M = await loadManifest();
-      MJ = JSON.stringify(M || {});
-      if (!unwatch) unwatch = watchManifest(onManifest);
+      let SL = [];
+      try { SL = await loadSubjects(); } catch (e) { SL = [{ key: 'gen', doc: 'manifest', en: 'General Chemistry', ar: 'الكيمياء العامة' }]; }
+      MS = {}; MJS = {};
+      const got = await Promise.all(SL.map((x) => loadManifest(x.doc).catch(() => null)));
+      SL.forEach((x, i) => { const m = got[i]; if (m && m.chapters && m.chapters.length) { MS[x.key] = m; MJS[x.key] = JSON.stringify(m); } });
+      SUBJ = SL.filter((x) => MS[x.key]);
+      let want = ''; try { want = localStorage.getItem('gueschemi.subject') || ''; } catch (e) {}
+      CURS = MS[want] ? want : (SUBJ[0] ? SUBJ[0].key : '');
+      M = MS[CURS] || null;
+      if (!unwatch) { const us = SUBJ.map((x) => watchManifest((nm) => onManifest(x.key, nm), x.doc)); unwatch = () => us.forEach((f) => f && f()); }
       if (!M || !M.chapters || !M.chapters.length) {
         renderUser();
         return gError(isAdmin ? 'لم يُرفع المحتوى بعد. افتح صفحة الإدارة وارفع ملفات المحتوى.' : 'المحتوى غير متاح حالياً، حاول لاحقاً.',
@@ -272,8 +293,9 @@ async function onUser(u) {
 
 function start(remote) {
   FLOW = {}; ITEMS = {}; SETKEYS = {};
-  const FIX = (M.fix && M.fix.ans) || {};   // تصحيحات الأجوبة من محرّر الإدارة
-  M.chapters.forEach((ch) => {
+  const sm = $('.brand small'); if (sm) sm.textContent = subj().en + ' · 1st-year Pharmacy';
+  SUBJ.forEach((sj) => { const MM = MS[sj.key]; const FIX = (MM.fix && MM.fix.ans) || {}; MM.chapters.forEach((ch) => {   // كل المواد معاً (وتصحيحات الأجوبة من المحرّر)
+    ch.sub = sj.key;
     const list = [];
     ch.sections.forEach((s) => s.pages.forEach((p) => list.push({ img: p.img, n: p.n, t: p.t, sec: s.en, secAr: s.ar, rev: false })));
     ch.revision.forEach((p) => list.push({ img: p.img, n: p.n, t: p.t, sec: 'Revision', secAr: p.ar || 'المراجعة', rev: true }));
@@ -282,7 +304,7 @@ function start(remote) {
       const s = sk(ch.id, set.key); SETKEYS[s] = [];
       set.q.forEach((q, i) => { const k = s + q.n; if (FIX[k]) q.ans = FIX[k]; ITEMS[k] = { key: k, ch: ch, set: set, q: q, i: i }; SETKEYS[s].push(k); });
     });
-  });
+  }); });
   prog = merge(readLocal(), remote);
   revRes = {}; revLists = {}; quizSel = {};
   ready = true;
@@ -301,13 +323,14 @@ function parse() {
   const h = raw.split('/').filter(Boolean);
   const n = (x) => parseInt(x, 10) || 1;
   if (!h.length) return { v: 'home' };
+  if (h[0] === 's' && h[1]) return { v: 'subj', key: h[1] };
   if (h[0] === 'stats') return { v: 'stats' };
   if (h[0] === 'mistakes') return { v: 'mistakes' };
   if (h[0] === 'fav') return { v: 'fav' };
   if (h[0] === 'progress') return { v: 'progress' };
   if (h[0] === 'search') return { v: 'search', q: decodeURIComponent(raw.slice(7) || '') };
   if (h[0] === 'today') return { v: 'review', src: 'today', i: n(h[1]) - 1 };
-  if (h[0] === 'cards') { const ch = h[1] && M.chapters.find((c) => String(c.id) === h[1]); return ch ? { v: 'deck', ch: ch, all: h[2] === 'all' } : { v: 'cards' }; }
+  if (h[0] === 'cards') { const ch = h[1] && allCh().find((c) => String(c.id) === h[1]); if (ch && ch.sub !== CURS) setSubject(ch.sub); return ch ? { v: 'deck', ch: ch, all: h[2] === 'all' } : { v: 'cards' }; }
   if (h[0] === 'review' && h[1]) return { v: 'review', src: h[1], i: n(h[2]) - 1 };
   if (h[0] === 'exam') {
     if (h[1] === 'q') return { v: 'examq', i: n(h[2]) - 1 };
@@ -315,8 +338,9 @@ function parse() {
     return { v: 'exam' };
   }
   if (h[0] === 'c') {
-    const ch = M.chapters.find((c) => String(c.id) === h[1]);
+    const ch = allCh().find((c) => String(c.id) === h[1]);
     if (!ch) return { v: 'home' };
+    if (ch.sub && ch.sub !== CURS) setSubject(ch.sub);
     if (h[2] === 'p') { const i = FLOW[ch.id].findIndex((p) => String(p.n) === h[3]); if (i >= 0) return { v: 'page', ch: ch, i: i }; }
     if (h[2] === 'q') { const set = ch.qcm.find((s) => s.key === h[3]); if (set) return { v: 'quiz', ch: ch, set: set, i: Math.max(0, Math.min(set.q.length - 1, n(h[4]) - 1)) }; }
     return { v: 'chapter', ch: ch };
@@ -327,8 +351,9 @@ function router() {
   if (!ready) return;
   const r = parse();
   if (r.v !== 'deck') FS = null;
+  if (r.v === 'subj') { setSubject(r.key); location.replace('#/'); return; }
   if (updPending && safeNow()) { updPending = false; if (pushTimer) push(); location.reload(); return; }
-  if (pendingM && safeNow()) { const nm = pendingM; pendingM = null; applyManifest(nm); return; }
+  if (pendingM && safeNow()) { const pm = pendingM; pendingM = null; applyManifest(pm.key, pm.nm); return; }
   CUR = null; renderId++;
   if (r.v === 'home') home();
   else if (r.v === 'stats') stats();
@@ -346,7 +371,6 @@ function router() {
   else if (r.v === 'examq') examQ(r.i);
   else if (r.v === 'examr') examResult(r.id);
   else if (r.v === 'examrq') examReview(r.id, r.i);
-  if (r.v !== 'deck') FS = null;
   if (r.v === 'page' || r.v === 'quiz' || r.v === 'chapter') { prog.last = location.hash; prog.lastT = now(); save(); }
   side(r);
   closeSide();
@@ -359,10 +383,10 @@ function side(r) {
   const cur = (r.ch && r.ch.id) || 0;
   const nw = wrongKeys().length, nf = favKeys().length + favPages().length, nd = dueKeys().length;
   const ex = prog.exam ? '<em class="lat live">' + fmtT(examLeft()) + '</em>' : '';
-  let h = '<nav aria-label="الفهرس"><a class="sl' + (r.v === 'home' ? ' on' : '') + '" href="#/"><i class="ico">⌂</i>الرئيسية</a>' +
+  let h = '<nav aria-label="الفهرس">' + subjTabs('insd') + '<a class="sl' + (r.v === 'home' ? ' on' : '') + '" href="#/"><i class="ico">⌂</i>الرئيسية</a>' +
     '<a class="sl' + (r.v === 'search' ? ' on' : '') + '" href="#/search"><i class="ico">⌕</i>البحث</a>' +
     '<a class="sl' + (r.v === 'progress' ? ' on' : '') + '" href="#/progress"><i class="ico">↗</i>تقدّمي</a>' +
-    '<a class="sl' + (r.v === 'stats' ? ' on' : '') + '" href="#/stats"><i class="ico">▤</i>الإحصائيات وخطة المراجعة</a>' +
+    (M.overview && M.overview.length ? '<a class="sl' + (r.v === 'stats' ? ' on' : '') + '" href="#/stats"><i class="ico">▤</i>الإحصائيات وخطة المراجعة</a>' : '') +
     '<p class="sh">أدوات المراجعة</p>' +
     '<a class="sl' + (r.v === 'review' && r.src === 'today' ? ' on' : '') + '" href="#/today"><i class="ico">↻</i>مراجعة اليوم' + (nd ? '<em class="lat live">' + nd + '</em>' : '') + '</a>' +
     '<a class="sl' + (r.v === 'cards' || r.v === 'deck' ? ' on' : '') + '" href="#/cards"><i class="ico">❐</i>بطاقات المراجعة' + (fcDueAll() ? '<em class="lat live">' + fcDueAll() + '</em>' : '') + '</a>' +
@@ -373,7 +397,7 @@ function side(r) {
   M.chapters.forEach((ch) => {
     const st = chStats(ch), open = ch.id === cur;
     h += '<div class="sch' + (open ? ' open' : '') + '" style="--c:var(--c' + ch.id + ')"><a class="sl ch' + (r.v === 'chapter' && open ? ' on' : '') + '" href="#/c/' + ch.id + '">' +
-      '<b class="num lat">' + ch.id + '</b><span><span class="lat en">' + esc(ch.en) + '</span><small>' + esc(ch.ar) + '</small></span>' +
+      '<b class="num lat">' + cn(ch) + '</b><span><span class="lat en">' + esc(ch.en) + '</span><small>' + esc(ch.ar) + '</small></span>' +
       '<i class="ring" style="--p:' + pct(st.read + st.qa, st.pages + st.qn) + '"></i></a>';
     if (open) {
       h += '<div class="sub">';
@@ -393,6 +417,10 @@ function side(r) {
     h += '</div>';
   });
   SIDE.innerHTML = h + '</nav>';
+}
+function subjTabs(where) {
+  if (SUBJ.length < 2) return '';
+  return '<div class="subjtabs ' + where + '" role="tablist" aria-label="المادة">' + SUBJ.map((x) => '<a role="tab" class="st' + (x.key === CURS ? ' on' : '') + '" aria-selected="' + (x.key === CURS) + '" href="#/s/' + esc(x.key) + '"><b>' + esc(x.ar) + '</b><small class="lat">' + esc(x.en) + '</small></a>').join('') + '</div>';
 }
 function openSide() { SIDE.classList.add('show'); $('#scrim').hidden = false; }
 function closeSide() { SIDE.classList.remove('show'); $('#scrim').hidden = true; }
@@ -441,19 +469,19 @@ function home() {
     const s = chStats(ch); tp += s.pages; tr += s.read; tq += s.qn; ta += s.qa; tok += s.qok;
     const off = ch.qcm.find((x) => x.key === 'official'), pro = ch.qcm.find((x) => x.key === 'proposed');
     return '<a class="ccard" href="#/c/' + ch.id + '" style="--c:var(--c' + ch.id + ')">' +
-      '<span class="cnum"><small>CH</small><b class="lat">' + ch.id + '</b></span>' +
+      '<span class="cnum"><small>CH</small><b class="lat">' + cn(ch) + '</b></span>' +
       '<span class="ctx"><span class="lat en">' + esc(ch.en) + '</span><span class="ar">' + esc(ch.ar) + '</span><span class="tp lat">' + esc(ch.topics) + '</span>' +
-      '<span class="facts"><span><b class="lat">' + ch.share + '%</b> من الامتحان</span><span><b class="lat">' + s.pages + '</b> صفحة</span><span><b class="lat">' + (off ? off.q.length : 0) + '</b> رسمي</span><span><b class="lat">' + (pro ? pro.q.length : 0) + '</b> مقترح</span></span>' +
+      '<span class="facts">' + (ch.share != null ? '<span><b class="lat">' + ch.share + '%</b> من الامتحان</span>' : '') + '<span><b class="lat">' + s.pages + '</b> صفحة</span><span><b class="lat">' + (off ? off.q.length : 0) + '</b> رسمي</span><span><b class="lat">' + (pro ? pro.q.length : 0) + '</b> مقترح</span></span>' +
       '<span class="pbar"><i style="width:' + pct(s.read, s.pages) + '%"></i></span><span class="pl">الدروس <b class="lat">' + s.read + '/' + s.pages + '</b> · الكيسيام <b class="lat">' + s.qa + '/' + s.qn + '</b>' + (s.qa ? ' · صحيح <b class="lat">' + pct(s.qok, s.qa) + '%</b>' : '') + '</span></span></a>';
   }).join('');
-  const nOff = Object.keys(ITEMS).filter((k) => ITEMS[k].set.key === 'official').length, nPro = Object.keys(ITEMS).length - nOff;
+  const nOff = Object.keys(ITEMS).filter((k) => inS(k) && ITEMS[k].set.key === 'official').length, nPro = Object.keys(ITEMS).filter(inS).length - nOff;
   const first = (me.name || '').split(' ')[0];
   const nw = wrongKeys().length, nf = favKeys().length + favPages().length, nd = dueKeys().length, lastEx = prog.hist[0];
   VIEW.innerHTML =
-    '<div class="hero"><div class="hero-in"><p class="kick lat">General Chemistry · 1st-year Pharmacy</p>' +
-    '<h1>' + (first ? 'أهلاً ' + esc(first) + '، ' : '') + 'الكيمياء العامة كاملة، شابيطر بشابيطر</h1>' +
+    '<div class="hero"><div class="hero-in">' + subjTabs('hero') + '<p class="kick lat">' + esc(subj().en) + ' · 1st-year Pharmacy</p>' +
+    '<h1>' + (first ? 'أهلاً ' + esc(first) + '، ' : '') + esc(subj().ar) + ' كاملة، شابيطر بشابيطر</h1>' +
     '<p class="lead">اقرأ كل درس مكتوباً، حلّ كيسيام الامتحانات والكيسيام المقترح، راجع أخطاءك كل يوم، ثم اختبر نفسك في امتحان تجريبي بالوقت.</p>' +
-    '<form class="hsearch" data-search><input type="search" name="q" placeholder="ابحث في الدروس والأسئلة… مثلاً Slater أو هوند" aria-label="بحث" autocomplete="off"><button type="submit" class="btn pri">بحث</button></form>' +
+    '<form class="hsearch" data-search><input type="search" name="q" placeholder="' + (CURS === 'org' ? 'ابحث في الدروس والأسئلة… مثلاً hybridization أو alkene' : 'ابحث في الدروس والأسئلة… مثلاً Slater أو هوند') + '" aria-label="بحث" autocomplete="off"><button type="submit" class="btn pri">بحث</button></form>' +
     '<div class="kpis"><span><b class="lat">' + nOff + '</b>كيسيام رسمي محلول</span><span><b class="lat">' + nPro + '</b>كيسيام مقترح</span><span><b class="lat">' + tp + '</b>صفحة دروس</span><span><b class="lat">' + M.chapters.length + '</b>شابيطرات</span></div>' +
     '<p class="acts">' + (prog.last ? '<a class="btn pri" href="' + esc(prog.last) + '">تابع من حيث توقفت ←</a>' : '<a class="btn pri" href="#/c/1">ابدأ بالشابيطر الأول ←</a>') + '<a class="btn ghost" href="#/exam">امتحان تجريبي</a></p>' +
     '</div></div>' +
@@ -496,9 +524,9 @@ function chapter(ch) {
       '<span class="pbar"><i style="width:' + pct(a, set.q.length) + '%"></i></span><span class="pl">' + (a ? 'أجبت عن <b class="lat">' + a + '/' + set.q.length + '</b> · صحيح <b class="lat">' + ok + '</b>' : 'لم تبدأ بعد') + '</span><span class="go">' + (a && a < set.q.length ? 'تابع' : a ? 'راجع' : 'ابدأ') + ' ←</span></a>';
   }).join('');
   const nw = wrongKeys(ch.id).length;
-  VIEW.innerHTML = '<div class="chero" style="--c:var(--c' + ch.id + ')"><div class="wrap chero-in"><div class="ctext"><nav class="crumb inv"><a href="#/">الرئيسية</a><span>›</span><b>CH ' + ch.id + '</b></nav>' +
-    '<p class="kick lat">Chapter ' + ch.id + '</p><h1><span class="lat">' + esc(ch.en) + '</span><span class="ar">' + esc(ch.ar) + '</span></h1><p class="tp lat">' + esc(ch.topics) + '</p>' +
-    '<div class="chips"><span><b class="lat">' + ch.share + '%</b> من أسئلة الامتحان</span><span>الترتيب <b class="lat">#' + ch.rank + '</b></span><span><b class="lat">' + ch.app + '</b> ظهوراً في الامتحانات</span></div>' +
+  VIEW.innerHTML = '<div class="chero" style="--c:var(--c' + ch.id + ')"><div class="wrap chero-in"><div class="ctext"><nav class="crumb inv"><a href="#/">الرئيسية</a><span>›</span><b>CH ' + cn(ch) + '</b></nav>' +
+    '<p class="kick lat">Chapter ' + cn(ch) + '</p><h1><span class="lat">' + esc(ch.en) + '</span><span class="ar">' + esc(ch.ar) + '</span></h1><p class="tp lat">' + esc(ch.topics) + '</p>' +
+    (ch.share != null ? '<div class="chips"><span><b class="lat">' + ch.share + '%</b> من أسئلة الامتحان</span><span>الترتيب <b class="lat">#' + ch.rank + '</b></span><span><b class="lat">' + ch.app + '</b> ظهوراً في الامتحانات</span></div>' : '<div class="chips"><span><b class="lat">' + FLOW[ch.id].length + '</b> صفحة</span><span><b class="lat">' + ch.qcm.reduce((a, x) => a + x.q.length, 0) + '</b> سؤال كيسيام</span></div>') +
     '<p class="acts"><a class="btn pri" href="#/c/' + ch.id + '/p/' + FLOW[ch.id][0].n + '">' + (s.read ? 'تابع الدروس' : 'ابدأ الدرس') + ' ←</a><a class="btn ghost" href="#/c/' + ch.id + '/q/official">كيسيام الامتحانات</a></p></div>' +
     '<div class="ccover">' + fig(ch.cover, 'cover', '16 / 9') + '</div></div></div>' +
     '<div class="wrap"><div class="cprog card"><div class="ov"><span>الدروس المقروءة</span><span class="pbar"><i style="width:' + pct(s.read, s.pages) + '%"></i></span><b class="lat">' + s.read + '/' + s.pages + '</b></div>' +
@@ -521,7 +549,7 @@ function page(ch, i) {
   const k = secPages.indexOf(p) + 1;
   const nav = (x, dir) => x ? '<a class="pn ' + dir + '" data-nav="' + dir + '" href="#/c/' + ch.id + '/p/' + x.n + '"><small>' + (dir === 'prev' ? '→ السابق' : 'التالي ←') + '</small><span class="lat">' + esc(x.t) + '</span></a>' : '<span class="pn empty"></span>';
   const endNext = next ? nav(next, 'next') : '<a class="pn next" data-nav="next" href="#/c/' + ch.id + '/q/official"><small>انتهت الدروس ←</small><span>انتقل إلى كيسيام الامتحانات</span></a>';
-  VIEW.innerHTML = '<div class="wrap reader">' + crumbs([['CH ' + ch.id + ' · ' + esc(ch.ar), '#/c/' + ch.id], [esc(p.secAr)]]) +
+  VIEW.innerHTML = '<div class="wrap reader">' + crumbs([['CH ' + cn(ch) + ' · ' + esc(ch.ar), '#/c/' + ch.id], [esc(p.secAr)]]) +
     '<header class="rhead" style="--c:var(--c' + ch.id + ')"><div><p class="kick"><span>' + esc(p.secAr) + '</span>' + (p.rev ? '' : '<span class="lat"> · ' + esc(p.sec) + '</span>') + '</p><h1 class="lat">' + esc(p.t) + '</h1><p class="artitle" dir="rtl" data-artitle></p></div>' +
     '<div class="rmeta">' + star('p' + p.n, true) + '<span class="lat" dir="ltr">' + k + ' / ' + secPages.length + '</span><span class="sep"></span><span>صفحة <b class="lat">' + (i + 1) + '</b> من <b class="lat">' + list.length + '</b></span></div></header>' +
     '<div class="rbar"><i style="width:' + pct(i + 1, list.length) + '%;background:var(--c' + ch.id + ')"></i></div>' +
@@ -577,7 +605,7 @@ function qscreen(ctx) {
   const chips = keys.map((k, j) => { const st = ctx.chip(k, j); const dis = ctx.chipDisabled && ctx.chipDisabled(j); return dis ? '<span class="qc dis' + (j === i ? ' cur' : '') + '"><span class="lat">' + (j + 1) + '</span></span>' : '<a class="qc' + (j === i ? ' cur' : '') + (st ? ' ' + st : '') + '" href="' + ctx.href(j) + '" aria-label="سؤال ' + (j + 1) + '"><span class="lat">' + (ctx.num ? ctx.num(k, j) : j + 1) + '</span></a>'; }).join('');
   const verdict = r ? '<div class="verdict ' + (r.ok ? 'ok' : 'ko') + '" role="status"><b>' + (r.ok ? '✓ إجابة صحيحة' : r.s ? '✗ إجابة غير صحيحة' : '— لم تُجب عن هذا السؤال') + '</b><span>' + (r.s ? 'إجابتك: <b class="lat">' + esc(r.s) + '</b> · ' : '') + 'الصحيح: <b class="lat">' + esc(q.ans) + '</b></span></div>' : '';
   const years = q.years && q.years.length ? '<span class="yrs">ظهر في: <b class="lat">' + q.years.join(' · ') + '</b>' + (q.years.length > 1 ? ' <em class="lat">×' + q.years.length + '</em>' : '') + '</span>' : (it.set.key === 'proposed' ? '<span class="yrs">سؤال مقترح</span>' : '');
-  const src = mode === 'practice' ? '' : '<a class="srcq" href="#/c/' + it.ch.id + '/q/' + it.set.key + '/' + (it.i + 1) + '" style="--c:var(--c' + it.ch.id + ')"><b class="lat">CH ' + it.ch.id + '</b> ' + KIND_AR[it.set.key] + ' · س<span class="lat">' + q.n + '</span></a>';
+  const src = mode === 'practice' ? '' : '<a class="srcq" href="#/c/' + it.ch.id + '/q/' + it.set.key + '/' + (it.i + 1) + '" style="--c:var(--c' + it.ch.id + ')"><b class="lat">CH ' + cn(it.ch) + '</b> ' + KIND_AR[it.set.key] + ' · س<span class="lat">' + q.n + '</span></a>';
   const flagged = live && prog.exam.flag && prog.exam.flag[key];
   let action = '';
   if (live) action = '<button type="button" class="btn ghost2 flag' + (flagged ? ' on' : '') + '" data-q="flag">' + (flagged ? '⚑ مُعلَّم للمراجعة' : '⚐ علّم للمراجعة') + '</button>';
@@ -624,7 +652,7 @@ function practice(r) {
     mode: 'practice', keys: keys, i: r.i, href: (j) => base + (j + 1), result: res,
     chip: (k) => res(k) ? (res(k).ok ? 'ok' : 'ko') : '', num: (k) => ITEMS[k].q.n,
     end: '<a class="btn" href="#/c/' + ch.id + '">رجوع للشابيطر</a>', set: set, ch: ch,
-    top: crumbs([['CH ' + ch.id + ' · ' + esc(ch.ar), '#/c/' + ch.id], [esc(set.ar)]]) +
+    top: crumbs([['CH ' + cn(ch) + ' · ' + esc(ch.ar), '#/c/' + ch.id], [esc(set.ar)]]) +
       '<header class="qhead"><div><p class="kick">' + (set.key === 'official' ? 'EXAM' : 'PROPOSED') + ' · <span class="lat">' + esc(ch.en) + '</span></p><h1>' + esc(set.ar) + '</h1></div>' + sc.html + '</header>' +
       '<div class="rbar"><i style="width:' + pct(sc.a, n) + '%;background:var(--c' + ch.id + ')"></i></div>' + summary
   });
@@ -643,7 +671,7 @@ function review(r) {
   const keys = revLists[r.src];
   const isW = r.src.indexOf('wrong') === 0, cid = isW ? parseInt(r.src.slice(5), 10) || 0 : 0;
   const back = isW ? ['أخطائي', '#/mistakes'] : REV_T[r.src] || ['المراجعة', '#/'];
-  const title = isW ? 'مراجعة الأخطاء' + (cid ? ' · CH ' + cid : '') : r.src === 'today' ? 'مراجعة اليوم' : 'مراجعة المفضلة';
+  const title = isW ? 'مراجعة الأخطاء' + (cid ? ' · CH ' + cn(chById(cid)) : '') : r.src === 'today' ? 'مراجعة اليوم' : 'مراجعة المفضلة';
   if (!keys.length) {
     const nextDue = Object.keys(prog.sr).map((k) => prog.sr[k]).filter((x) => x && !x.done).map((x) => x.due).sort((a, b) => a - b)[0];
     VIEW.innerHTML = '<div class="wrap narrow">' + crumbs([[title]]) +
@@ -669,11 +697,11 @@ function mistakes() {
   const all = wrongKeys();
   const rows = M.chapters.map((ch) => {
     const w = wrongKeys(ch.id), done = SETKEYS[sk(ch.id, 'official')].concat(SETKEYS[sk(ch.id, 'proposed')] || []).filter(res).length;
-    return '<div class="mrow" style="--c:var(--c' + ch.id + ')"><span class="cnum sm"><b class="lat">' + ch.id + '</b></span><span class="mt"><b>' + esc(ch.ar) + '</b><small class="lat">' + esc(ch.en) + '</small></span>' +
+    return '<div class="mrow" style="--c:var(--c' + ch.id + ')"><span class="cnum sm"><b class="lat">' + cn(ch) + '</b></span><span class="mt"><b>' + esc(ch.ar) + '</b><small class="lat">' + esc(ch.en) + '</small></span>' +
       '<span class="mc"><b class="lat">' + w.length + '</b> خطأ من <span class="lat">' + done + '</span> محلول</span>' +
       (w.length ? '<a class="btn sm pri" href="#/review/wrong' + ch.id + '/1">راجع</a>' : '<span class="okc">✓</span>') + '</div>';
   }).join('');
-  const chips = all.map((k) => '<a class="mq" href="#/c/' + ITEMS[k].ch.id + '/q/' + ITEMS[k].set.key + '/' + (ITEMS[k].i + 1) + '" style="--c:var(--c' + ITEMS[k].ch.id + ')"><b class="lat">CH' + ITEMS[k].ch.id + '</b> ' + KIND_AR[ITEMS[k].set.key] + ' <span class="lat">' + ITEMS[k].q.n + '</span></a>').join('');
+  const chips = all.map((k) => '<a class="mq" href="#/c/' + ITEMS[k].ch.id + '/q/' + ITEMS[k].set.key + '/' + (ITEMS[k].i + 1) + '" style="--c:var(--c' + ITEMS[k].ch.id + ')"><b class="lat">CH' + cn(ITEMS[k].ch) + '</b> ' + KIND_AR[ITEMS[k].set.key] + ' <span class="lat">' + ITEMS[k].q.n + '</span></a>').join('');
   VIEW.innerHTML = '<div class="wrap narrow">' + crumbs([['أخطائي']]) +
     '<header class="phead"><h1>أخطائي</h1><p>كل سؤال أجبت عنه خطأً، في التدريب أو في الامتحان التجريبي، يظهر هنا حتى تصححه.</p></header>' +
     '<div class="mhead card"><div><b class="lat big">' + all.length + '</b><span>سؤالاً تحتاج مراجعة</span></div>' + (all.length ? '<a class="btn pri" href="#/review/wrong/1">راجع كل الأخطاء ←</a>' : '<a class="btn pri" href="#/exam">جرّب امتحاناً تجريبياً</a>') + '</div>' +
@@ -683,8 +711,8 @@ function mistakes() {
 
 function favorites() {
   const pages = favPages(), qs = favKeys();
-  const pl = pages.map((x) => '<a class="tile" href="#/c/' + x.ch.id + '/p/' + x.p.n + '" style="border-color:var(--c' + x.ch.id + ')"><b>' + esc(x.p.secAr) + ' <small class="lat">CH ' + x.ch.id + '</small></b><small class="lat">' + esc(x.p.t) + '</small></a>').join('');
-  const ql = qs.map((k) => '<a class="mq" href="#/c/' + ITEMS[k].ch.id + '/q/' + ITEMS[k].set.key + '/' + (ITEMS[k].i + 1) + '" style="--c:var(--c' + ITEMS[k].ch.id + ')"><b class="lat">CH' + ITEMS[k].ch.id + '</b> ' + KIND_AR[ITEMS[k].set.key] + ' <span class="lat">' + ITEMS[k].q.n + '</span>' + (res(k) ? (res(k).ok ? ' <i class="okc">✓</i>' : ' <i class="koc">✗</i>') : '') + '</a>').join('');
+  const pl = pages.map((x) => '<a class="tile" href="#/c/' + x.ch.id + '/p/' + x.p.n + '" style="border-color:var(--c' + x.ch.id + ')"><b>' + esc(x.p.secAr) + ' <small class="lat">CH ' + cn(x.ch) + '</small></b><small class="lat">' + esc(x.p.t) + '</small></a>').join('');
+  const ql = qs.map((k) => '<a class="mq" href="#/c/' + ITEMS[k].ch.id + '/q/' + ITEMS[k].set.key + '/' + (ITEMS[k].i + 1) + '" style="--c:var(--c' + ITEMS[k].ch.id + ')"><b class="lat">CH' + cn(ITEMS[k].ch) + '</b> ' + KIND_AR[ITEMS[k].set.key] + ' <span class="lat">' + ITEMS[k].q.n + '</span>' + (res(k) ? (res(k).ok ? ' <i class="okc">✓</i>' : ' <i class="koc">✗</i>') : '') + '</a>').join('');
   VIEW.innerHTML = '<div class="wrap narrow">' + crumbs([['المفضلة']]) +
     '<header class="phead"><h1>المفضلة</h1><p>اضغط على النجمة ☆ في أي صفحة درس أو سؤال ليُحفظ هنا.</p></header>' +
     (!pages.length && !qs.length ? '<div class="empty card"><b>لا شيء في المفضلة بعد</b><p>افتح أي درس أو سؤال واضغط ☆.</p></div>' : '') +
@@ -715,7 +743,7 @@ function cardsHome() {
   const any = M.chapters.some((ch) => ch.flash);
   const rows = M.chapters.filter((ch) => ch.flash).map((ch) => {
     const s = fcStat(ch), todo = s.nw + s.due;
-    return '<div class="fcrow card" style="--c:var(--c' + ch.id + ')"><span class="cnum sm"><b class="lat">' + ch.id + '</b></span>' +
+    return '<div class="fcrow card" style="--c:var(--c' + ch.id + ')"><span class="cnum sm"><b class="lat">' + cn(ch) + '</b></span>' +
       '<span class="mt"><b>' + esc(ch.ar) + '</b><small class="lat">' + esc(ch.en) + '</small></span>' +
       '<span class="fcst"><span><b class="lat">' + s.n + '</b> بطاقة</span><span><b class="lat">' + s.nw + '</b> جديدة</span><span class="due"><b class="lat">' + s.due + '</b> للمراجعة</span><span class="okc"><b class="lat">' + s.mast + '</b> محفوظة</span></span>' +
       '<span class="pbar ok"><i style="width:' + pct(s.mast, s.n) + '%"></i></span>' +
@@ -740,7 +768,7 @@ function deck(ch, all) {
     FS = { cid: ch.id, all: all, list: list.map((c) => c.id), i: 0, flip: false, ok: 0, ko: 0, again: {} };
   }
   const base = '#/cards/' + ch.id + (all ? '/all' : '');
-  const top = crumbs([['بطاقات المراجعة', '#/cards'], ['CH ' + ch.id + ' · ' + esc(ch.ar)]]) +
+  const top = crumbs([['بطاقات المراجعة', '#/cards'], ['CH ' + cn(ch) + ' · ' + esc(ch.ar)]]) +
     '<header class="qhead"><div><p class="kick">FLASHCARDS · <span class="lat">' + esc(ch.en) + '</span></p><h1>' + (all ? 'كل البطاقات' : 'بطاقات اليوم') + '</h1></div>' +
     '<div class="qscore"><span>عرفتها <b class="lat okc">' + FS.ok + '</b></span><span>لم أعرفها <b class="lat koc">' + FS.ko + '</b></span></div></header>';
   const n = FS.list.length;
@@ -832,8 +860,8 @@ async function runSearch(q) {
   });
   hits.sort((x, y) => y[0] - x[0]);
   const pages = hits.filter((h) => h[1].type === 'p').slice(0, 30), qs = hits.filter((h) => h[1].type === 'q').slice(0, 40);
-  const pr = pages.map(([, d]) => '<a class="sr" href="#/c/' + d.ch.id + '/p/' + d.p.n + '" style="--c:var(--c' + d.ch.id + ')"><span class="sbadge lat">CH ' + d.ch.id + '</span><b class="lat">' + esc(d.title) + '</b><small>' + esc(d.sub || '') + '</small><span class="snip" dir="auto">' + snippet(d.body, terms) + '</span></a>').join('');
-  const qr = qs.map(([, d]) => { const it = ITEMS[d.key]; return '<a class="sr" href="#/c/' + it.ch.id + '/q/' + it.set.key + '/' + (it.i + 1) + '" style="--c:var(--c' + it.ch.id + ')"><span class="sbadge lat">CH ' + it.ch.id + ' · ' + KIND_AR[it.set.key] + ' ' + it.q.n + '</span><b class="lat" dir="ltr">' + esc(d.title) + '</b><small dir="rtl">' + esc(d.sub) + '</small></a>'; }).join('');
+  const pr = pages.map(([, d]) => '<a class="sr" href="#/c/' + d.ch.id + '/p/' + d.p.n + '" style="--c:var(--c' + d.ch.id + ')"><span class="sbadge lat">CH ' + cn(d.ch) + '</span><b class="lat">' + esc(d.title) + '</b><small>' + esc(d.sub || '') + '</small><span class="snip" dir="auto">' + snippet(d.body, terms) + '</span></a>').join('');
+  const qr = qs.map(([, d]) => { const it = ITEMS[d.key]; return '<a class="sr" href="#/c/' + it.ch.id + '/q/' + it.set.key + '/' + (it.i + 1) + '" style="--c:var(--c' + it.ch.id + ')"><span class="sbadge lat">CH ' + cn(it.ch) + ' · ' + KIND_AR[it.set.key] + ' ' + it.q.n + '</span><b class="lat" dir="ltr">' + esc(d.title) + '</b><small dir="rtl">' + esc(d.sub) + '</small></a>'; }).join('');
   box.innerHTML = (!pages.length && !qs.length ? '<div class="empty card"><b>لا نتائج</b><p>جرّب كلمة أخرى أو تهجئة مختلفة.</p></div>' : '') +
     (pages.length ? '<h2 class="h2">الدروس <small class="lat">' + pages.length + '</small></h2><div class="srs">' + pr + '</div>' : '') +
     (qs.length ? '<h2 class="h2">الأسئلة <small class="lat">' + qs.length + '</small></h2><div class="srs">' + qr + '</div>' : '');
@@ -871,14 +899,14 @@ function progressPage() {
   const pts = hist.map((h) => ({ v: pct(h.ok, h.n), l: new Date(h.end).toLocaleDateString('fr-DZ', { day: '2-digit', month: '2-digit' }), tip: h.ok + '/' + h.n }));
   const best = prog.hist.reduce((m, h) => Math.max(m, pct(h.ok, h.n)), 0);
   const weak = per.filter((x) => x.s.qa >= 3).sort((a, b) => a.s.qok / a.s.qa - b.s.qok / b.s.qa);
-  const bars = per.map((x) => { const acc = pct(x.s.qok, x.s.qa); return '<div class="pbrow" style="--c:var(--c' + x.ch.id + ')"><span class="pbl"><b class="lat">CH ' + x.ch.id + '</b> ' + esc(x.ch.ar) + '</span><span class="pbar"><i style="width:' + acc + '%"></i></span><b class="lat">' + (x.s.qa ? acc + '%' : '—') + '</b><small class="lat">' + x.s.qok + '/' + x.s.qa + '</small></div>'; }).join('');
-  const sets = ['official', 'proposed'].map((kind) => { let a = 0, ok = 0; Object.keys(ITEMS).forEach((k) => { if (ITEMS[k].set.key === kind && res(k)) { a++; if (res(k).ok) ok++; } }); return '<span><b class="lat">' + pct(ok, a) + '%</b>' + (kind === 'official' ? 'صحيح في الأسئلة الرسمية' : 'صحيح في الأسئلة المقترحة') + '</span>'; }).join('');
+  const bars = per.map((x) => { const acc = pct(x.s.qok, x.s.qa); return '<div class="pbrow" style="--c:var(--c' + x.ch.id + ')"><span class="pbl"><b class="lat">CH ' + cn(x.ch) + '</b> ' + esc(x.ch.ar) + '</span><span class="pbar"><i style="width:' + acc + '%"></i></span><b class="lat">' + (x.s.qa ? acc + '%' : '—') + '</b><small class="lat">' + x.s.qok + '/' + x.s.qa + '</small></div>'; }).join('');
+  const sets = ['official', 'proposed'].map((kind) => { let a = 0, ok = 0; Object.keys(ITEMS).forEach((k) => { if (inS(k) && ITEMS[k].set.key === kind && res(k)) { a++; if (res(k).ok) ok++; } }); return '<span><b class="lat">' + pct(ok, a) + '%</b>' + (kind === 'official' ? 'صحيح في الأسئلة الرسمية' : 'صحيح في الأسئلة المقترحة') + '</span>'; }).join('');
   VIEW.innerHTML = '<div class="wrap narrow">' + crumbs([['تقدّمي']]) +
     '<header class="phead"><h1>تقدّمي</h1><p>نتائجك في الامتحانات التجريبية، ودقتك في كل شابيطر، لتعرف أين تركّز.</p></header>' +
     '<div class="kpis light"><span><b class="lat">' + pct(tr, tp) + '%</b>من الدروس مقروءة</span><span><b class="lat">' + ta + '/' + tq + '</b>سؤالاً محلولاً</span><span><b class="lat">' + pct(tok, ta) + '%</b>إجابات صحيحة</span><span><b class="lat">' + prog.hist.length + '</b>امتحاناً تجريبياً' + (best ? ' · أفضل <span class="lat">' + best + '%</span>' : '') + '</span>' + sets + '</div>' +
     '<h2 class="h2">تطور نتائج الامتحانات التجريبية</h2><div class="card chartbox">' + (pts.length ? lineChart(pts) : '<div class="empty"><b>لا توجد نتائج بعد</b><p>أجرِ أول امتحان تجريبي ليظهر منحنى تطورك هنا.</p><p class="acts"><a class="btn pri" href="#/exam">ابدأ امتحاناً</a></p></div>') + '</div>' +
     '<h2 class="h2">دقتك حسب الشابيطر</h2><div class="card pbars">' + bars + '</div>' +
-    (weak.length ? '<h2 class="h2">أين تركّز الآن؟</h2><div class="weak">' + weak.slice(0, 3).map((x, j) => '<div class="wk card" style="--c:var(--c' + x.ch.id + ')"><span class="wn lat">' + (j + 1) + '</span><div><b>' + esc(x.ch.ar) + ' <small class="lat">CH ' + x.ch.id + '</small></b><p>دقتك <b class="lat">' + pct(x.s.qok, x.s.qa) + '%</b> · وزنه في الامتحان <b class="lat">' + x.ch.share + '%</b></p></div>' + (wrongKeys(x.ch.id).length ? '<a class="btn sm pri" href="#/review/wrong' + x.ch.id + '/1">راجع أخطاءه</a>' : '<a class="btn sm" href="#/c/' + x.ch.id + '">افتح الشابيطر</a>') + '</div>').join('') + '</div>' : '') +
+    (weak.length ? '<h2 class="h2">أين تركّز الآن؟</h2><div class="weak">' + weak.slice(0, 3).map((x, j) => '<div class="wk card" style="--c:var(--c' + x.ch.id + ')"><span class="wn lat">' + (j + 1) + '</span><div><b>' + esc(x.ch.ar) + ' <small class="lat">CH ' + cn(x.ch) + '</small></b><p>دقتك <b class="lat">' + pct(x.s.qok, x.s.qa) + '%</b>' + (x.ch.share != null ? ' · وزنه في الامتحان <b class="lat">' + x.ch.share + '%</b>' : '') + '</p></div>' + (wrongKeys(x.ch.id).length ? '<a class="btn sm pri" href="#/review/wrong' + x.ch.id + '/1">راجع أخطاءه</a>' : '<a class="btn sm" href="#/c/' + x.ch.id + '">افتح الشابيطر</a>') + '</div>').join('') + '</div>' : '') +
     '</div>';
 }
 
@@ -908,10 +936,10 @@ function buildExam(n, src, chs, weighted) {
   if (!weighted) return shuffle(pool.slice()).slice(0, n);
   const by = {}; pool.forEach((k) => { (by[ITEMS[k].ch.id] = by[ITEMS[k].ch.id] || []).push(k); });
   const cs = M.chapters.filter((c) => by[c.id]);
-  const total = cs.reduce((a, c) => a + c.share, 0);
+  const total = cs.reduce((a, c) => a + (c.share || 1), 0);
   const quota = {}; let used = 0;
-  cs.forEach((c) => { quota[c.id] = Math.min(by[c.id].length, Math.floor(n * c.share / total)); used += quota[c.id]; });
-  const order = cs.slice().sort((a, b) => b.share - a.share);
+  cs.forEach((c) => { quota[c.id] = Math.min(by[c.id].length, Math.floor(n * (c.share || 1) / total)); used += quota[c.id]; });
+  const order = cs.slice().sort((a, b) => (b.share || 1) - (a.share || 1));
   for (let g = 0; used < n && g < 2000; g++) { const c = order[g % order.length]; if (quota[c.id] < by[c.id].length) { quota[c.id]++; used++; } }
   const keys = [];
   cs.forEach((c) => { shuffle(by[c.id].slice()).slice(0, quota[c.id]).forEach((k) => keys.push(k)); });
@@ -920,7 +948,12 @@ function buildExam(n, src, chs, weighted) {
 let exForm = null;
 function examHome() {
   const e = prog.exam;
-  const f = exForm || (exForm = { n: 40, src: 'official', chs: M.chapters.map((c) => c.id), weighted: true, tmode: 't', h: 1, m: 0, pq: 90 });
+  if (!exForm) {
+    const ids = M.chapters.map((c) => c.id), src0 = poolFor('official', ids).length >= 40 ? 'official' : 'all', np = poolFor(src0, ids).length;
+    const n0 = [40, 20].find((x) => x <= np) || 20;
+    exForm = { n: n0, src: src0, chs: ids, weighted: M.chapters.some((c) => c.share != null), tmode: 't', h: Math.floor(EXAM_MAX[n0] / 60), m: EXAM_MAX[n0] % 60, pq: 90 };
+  }
+  const f = exForm;
   const hist = prog.hist.map((h) => '<a class="hrow" href="#/exam/r/' + h.id + '"><span class="lat">' + new Date(h.end).toLocaleDateString('fr-DZ') + '</span><span>' + h.n + ' سؤالاً · ' + ({ all: 'رسمي + مقترح', proposed: 'مقترح', official: 'رسمي' }[h.src] || '') + (h.mode === 'q' ? ' · وقت لكل سؤال' : '') + '</span><b class="lat ' + (h.ok / h.n >= 0.5 ? 'okc' : 'koc') + '">' + h.ok + '/' + h.n + ' · ' + pct(h.ok, h.n) + '%</b><span class="lat">' + fmtT(h.used) + '</span></a>').join('');
   const cur = e ? '<div class="exnow card"><div><p class="kick">امتحان جارٍ</p><b><span class="lat">' + e.keys.length + '</span> سؤالاً · أجبت عن <span class="lat">' + Object.keys(e.ans).filter((k) => e.ans[k]).length + '</span></b><span class="timer lat" data-timer>' + fmtT(examLeft()) + '</span></div>' +
     '<p class="acts"><a class="btn pri" href="#/exam/q/' + ((e.mode === 'q' ? e.cur : 0) + 1) + '">تابع الامتحان ←</a><button type="button" class="btn" data-q="abandon">إلغاء الامتحان</button></p></div>' : '';
@@ -939,8 +972,8 @@ function examHome() {
     '<div class="exset card" id="exset">' +
     '<h3>1 · عدد الأسئلة <small>متاح الآن: <b class="lat">' + pool + '</b></small></h3><div class="ropts five">' + [20, 40, 60, 80, 100].map((n) => radio('n', n, n + ' سؤالاً', 'حتى ' + fmtDur(EXAM_MAX[n] * 60), f.n === n, n > pool)).join('') + '</div>' +
     '<h3>2 · مصدر الأسئلة</h3><div class="ropts">' + radio('src', 'official', 'الامتحانات الرسمية', '99 سؤالاً (16/17 → 25/26)', f.src === 'official') + radio('src', 'proposed', 'الكيسيام المقترح', '81 سؤالاً', f.src === 'proposed') + radio('src', 'all', 'معاً', '180 سؤالاً', f.src === 'all') + '</div>' +
-    '<h3>3 · الشابيطرات</h3><div class="chks">' + M.chapters.map((c) => '<label class="chk" style="--c:var(--c' + c.id + ')"><input type="checkbox" name="ch" value="' + c.id + '"' + (f.chs.indexOf(c.id) >= 0 ? ' checked' : '') + '><span><b class="lat">CH ' + c.id + '</b> ' + esc(c.ar) + '</span></label>').join('') + '</div>' +
-    '<label class="tgl"><input type="checkbox" name="weighted"' + (f.weighted ? ' checked' : '') + '><span>وزّع الأسئلة حسب أهمية كل شابيطر في الامتحان الحقيقي</span></label>' +
+    '<h3>3 · الشابيطرات</h3><div class="chks">' + M.chapters.map((c) => '<label class="chk" style="--c:var(--c' + c.id + ')"><input type="checkbox" name="ch" value="' + c.id + '"' + (f.chs.indexOf(c.id) >= 0 ? ' checked' : '') + '><span><b class="lat">CH ' + cn(c) + '</b> ' + esc(c.ar) + '</span></label>').join('') + '</div>' +
+    (M.chapters.some((c) => c.share != null) ? '<label class="tgl"><input type="checkbox" name="weighted"' + (f.weighted ? ' checked' : '') + '><span>وزّع الأسئلة حسب أهمية كل شابيطر في الامتحان الحقيقي</span></label>' : '') +
     '<h3>4 · الوقت</h3><div class="ropts">' + radio('tmode', 't', 'وقت للامتحان كله', 'تتنقل بحرية بين الأسئلة', f.tmode === 't') + radio('tmode', 'q', 'وقت لكل سؤال', 'ينتقل تلقائياً عند انتهاء الوقت', f.tmode === 'q') + '</div>' +
     (f.tmode === 't' ? '<div class="tsel"><label>الساعات <select name="h">' + hOpts.join('') + '</select></label><label>الدقائق <select name="m">' + mOpts.join('') + '</select></label><span class="small">الحد الأقصى لـ <b class="lat">' + f.n + '</b> سؤالاً: <b>' + fmtDur(maxMin * 60) + '</b></span></div>' + (over ? '<p class="err">الوقت أكبر من الحد الأقصى، سيُضبط على ' + fmtDur(maxMin * 60) + '.</p>' : zero ? '<p class="err">اختر وقتاً أكبر من صفر.</p>' : '')
       : '<div class="tsel"><label>لكل سؤال <select name="pq">' + PERQ.map((s) => '<option value="' + s + '"' + (s === f.pq ? ' selected' : '') + '>' + (s < 60 ? s + ' ثانية' : (s % 60 ? Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') : s / 60) + ' دقيقة') + '</option>').join('') + '</select></label><span class="small">المدة الكلية: <b>' + fmtDur(f.pq * f.n) + '</b> · الحد الأقصى 5 دقائق للسؤال</span></div>') +
@@ -1031,9 +1064,9 @@ function examResult(id) {
   const h = histById(id);
   if (!h) { go('#/exam'); return; }
   const p = pct(h.ok, h.n), mark = Math.round(20 * h.ok / h.n * 10) / 10;
-  const rows = M.chapters.filter((c) => h.by[c.id]).map((c) => { const b = h.by[c.id]; return '<div class="ov" style="--c:var(--c' + c.id + ')"><span><b class="lat">CH ' + c.id + '</b> ' + esc(c.ar) + '</span><span class="pbar"><i style="width:' + pct(b[0], b[1]) + '%"></i></span><b class="lat">' + b[0] + '/' + b[1] + '</b></div>'; }).join('');
+  const rows = M.chapters.filter((c) => h.by[c.id]).map((c) => { const b = h.by[c.id]; return '<div class="ov" style="--c:var(--c' + c.id + ')"><span><b class="lat">CH ' + cn(c) + '</b> ' + esc(c.ar) + '</span><span class="pbar"><i style="width:' + pct(b[0], b[1]) + '%"></i></span><b class="lat">' + b[0] + '/' + b[1] + '</b></div>'; }).join('');
   const chips = h.keys.map((k, j) => { const s = h.ans[k] || '', good = s && ITEMS[k] && s === norm(ITEMS[k].q.ans); return '<a class="qc ' + (good ? 'ok' : s ? 'ko' : 'na') + '" href="#/exam/r/' + h.id + '/' + (j + 1) + '"><span class="lat">' + (j + 1) + '</span></a>'; }).join('');
-  const weak = M.chapters.filter((c) => h.by[c.id] && h.by[c.id][0] / h.by[c.id][1] < 0.5).map((c) => 'CH ' + c.id);
+  const weak = M.chapters.filter((c) => h.by[c.id] && h.by[c.id][0] / h.by[c.id][1] < 0.5).map((c) => 'CH ' + cn(c));
   VIEW.innerHTML = '<div class="wrap narrow">' + crumbs([['امتحان تجريبي', '#/exam'], ['النتيجة']]) +
     '<div class="exres card ' + (p >= 50 ? 'pass' : 'fail') + '"><div class="big"><b class="lat">' + mark + '</b><small>/ 20</small></div><div><p class="kick">' + (h.auto ? 'انتهى الوقت · سُلّم تلقائياً' : 'النتيجة') + '</p><h1><span class="lat">' + h.ok + ' / ' + h.n + '</span> إجابة صحيحة · <span class="lat">' + p + '%</span></h1>' +
     '<p>الوقت المستعمل <b class="lat">' + fmtT(h.used) + '</b> من <b class="lat">' + fmtT(h.dur) + '</b>' + (weak.length ? ' · ركّز على: <b class="lat">' + weak.join('، ') + '</b>' : '') + '</p>' +

@@ -1,9 +1,9 @@
 // لوحة الإدارة: قبول الطلبة، إدارة القائمة، ورفع المحتوى (الفهرس + حزم الصور) إلى Firestore.
 import {
   watchUser, signIn, signOutUser, isAdminUser, listRequests, listAllowed,
-  approve, reject, removeAllowed, addAllowed, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, configMissing
-} from './firebase.js?v=10';
-import { mountEditor } from './editor.js?v=10';
+  approve, reject, removeAllowed, addAllowed, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, loadSubjects, saveSubjects, DEFAULT_SUBJECTS, configMissing
+} from './firebase.js?v=11';
+import { mountEditor } from './editor.js?v=11';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const box = $('#box');
@@ -77,8 +77,9 @@ async function refresh() {
   const [req, allowed, progress, devices] = await Promise.all([listRequests(), listAllowed(), listProgress().catch(() => []), listDevices().catch(() => [])]);
   if (!TOT) {
     try {
-      const m = await loadManifest();
-      if (m) TOT = { pages: m.chapters.reduce((a, c) => a + c.sections.reduce((b, s) => b + s.pages.length, 0) + c.revision.length, 0), qs: m.chapters.reduce((a, c) => a + c.qcm.reduce((b, s) => b + s.q.length, 0), 0) };
+      const SL = await loadSubjects(); const ms = (await Promise.all(SL.map((x) => loadManifest(x.doc).catch(() => null)))).filter((x) => x && x.chapters);
+      const m = { chapters: ms.reduce((a, x) => a.concat(x.chapters), []) };
+      if (m.chapters.length) TOT = { pages: m.chapters.reduce((a, c) => a + c.sections.reduce((b, s) => b + s.pages.length, 0) + c.revision.length, 0), qs: m.chapters.reduce((a, c) => a + c.qcm.reduce((b, s) => b + s.q.length, 0), 0) };
     } catch (e) {}
   }
   box.innerHTML =
@@ -89,7 +90,7 @@ async function refresh() {
     (allowed.length ? '<ul class="list" id="alw">' + allowed.map((r) => li(r, 'alw')).join('') + '</ul>' : '<p class="small">لا يوجد طلبة مقبولون بعد.</p>') + '</div>' +
     progressCard(allowed, progress, devices) +
     '<div class="card"><h2>محتوى الموقع <small>Content</small></h2>' +
-    '<p class="small">اختر <b>كل</b> ملفات المحتوى معاً: <b class="lat">manifest.json</b> وملفات <b class="lat">pack-….json</b> (7 ملفات). لإضافة بطاقات المراجعة وحدها اختر الملف <b class="lat">pack-cards.json</b> فقط. تعديلاتك من المحرّر تبقى محفوظة عند إعادة الرفع. ملاحظة: الصور التي رُفعت سابقاً من هذا المتصفح تُتخطّى تلقائياً. الرفع يستغرق بضع دقائق، وإن انقطع أعد الضغط على «رفع المحتوى» من نفس المتصفح وسيكمل من حيث توقف.</p>' +
+    '<p class="small">اختر <b>كل</b> ملفات المحتوى معاً: <b class="lat">manifest.json</b> وملفات <b class="lat">pack-….json</b> (7 ملفات). لإضافة بطاقات المراجعة وحدها اختر الملف <b class="lat">pack-cards.json</b> فقط. <b>للكيمياء العضوية</b> اختر الملفات الثلاثة: <b class="lat">manifest_org.json</b> و<b class="lat">pack-org11.json</b> و<b class="lat">pack-org12.json</b>. تعديلاتك من المحرّر تبقى محفوظة عند إعادة الرفع. ملاحظة: الصور التي رُفعت سابقاً من هذا المتصفح تُتخطّى تلقائياً. الرفع يستغرق بضع دقائق، وإن انقطع أعد الضغط على «رفع المحتوى» من نفس المتصفح وسيكمل من حيث توقف.</p>' +
     '<div class="row-form"><input class="input" id="file" type="file" accept="application/json,.json" multiple><button type="button" class="btn pri" id="upload">رفع المحتوى</button></div>' +
     '<div class="prog-up" id="up" hidden><span class="pbar"><i id="upbar" style="width:0%"></i></span><p class="small" id="uptxt"></p></div>' +
     '<p id="msg" class="' + (note.indexOf('✓') === 0 ? 'okmsg' : 'err') + '" role="status">' + esc(note) + '</p></div>';
@@ -147,10 +148,20 @@ async function upload(files) {
   await Promise.all([worker(), worker(), worker(), worker()]);
   if (missing.length) throw new Error('صور ناقصة (' + missing.length + '): اختر كل ملفات pack ثم أعد الرفع. أول صورة ناقصة: ' + missing[0]);
   txt.textContent = 'جارٍ حفظ الفهرس…';
-  let cur = null; try { cur = await loadManifest(); } catch (e) {}
+  const sub = manifest.subject && manifest.subject.key && manifest.subject.key !== 'gen' ? manifest.subject : null;
+  const docId = sub ? 'manifest_' + sub.key : 'manifest';
+  let cur = null; try { cur = await loadManifest(docId); } catch (e) {}
   if (cur) keepEdits(manifest, cur);
-  await uploadManifest(manifest);
-  return { sent: sent, skipped: skipped, total: ids.length, ch: manifest.chapters.length };
+  await uploadManifest(manifest, docId);
+  if (sub) {   // سجل المواد: الكيمياء العامة + هذه المادة
+    let L = []; try { L = await loadSubjects(); } catch (e) { L = DEFAULT_SUBJECTS.slice(); }
+    if (!L.some((x) => x.key === 'gen')) L.unshift(DEFAULT_SUBJECTS[0]);
+    const e = { key: sub.key, doc: docId, en: sub.en || sub.key, ar: sub.ar || sub.key };
+    const i = L.findIndex((x) => x.key === sub.key); if (i >= 0) L[i] = e; else L.push(e);
+    await saveSubjects(L);
+  }
+  TOT = null;
+  return { sub: sub ? (sub.ar || sub.key) : '', sent: sent, skipped: skipped, total: ids.length, ch: manifest.chapters.length };
 }
 // لا نفقد تعديلات المحرّر ولا البطاقات عند إعادة رفع نفس المحتوى
 function keepEdits(nm, cur) {
@@ -207,7 +218,7 @@ document.addEventListener('click', async (e) => {
     busy = true; t.disabled = true; msg.className = ''; msg.textContent = 'جارٍ قراءة الملفات… لا تغلق الصفحة.';
     try {
       const r = await upload(files);
-      msg.className = 'okmsg'; msg.textContent = r.patch ? '✓ اكتمل: أضيفت بطاقات المراجعة إلى ' + r.ch + ' شابيطرات (' + r.total + ' ملفات).' : '✓ اكتمل: ' + r.ch + ' شابيطرات، ' + r.total + ' صورة (رُفع ' + r.sent + '، موجود مسبقاً ' + r.skipped + ').';
+      msg.className = 'okmsg'; msg.textContent = r.patch ? '✓ اكتمل: أضيفت بطاقات المراجعة إلى ' + r.ch + ' شابيطرات (' + r.total + ' ملفات).' : '✓ اكتمل' + (r.sub ? ' (' + r.sub + ')' : '') + ': ' + r.ch + ' شابيطرات، ' + r.total + ' صورة (رُفع ' + r.sent + '، موجود مسبقاً ' + r.skipped + ').';
       if (edMounted) mountEditor($('#ed'));
     } catch (err) { msg.className = 'err'; msg.textContent = (err && err.message) || String(err); }
     busy = false; t.disabled = false; return;

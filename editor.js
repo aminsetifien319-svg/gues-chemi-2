@@ -1,8 +1,8 @@
 // محرّر المحتوى (للمشرف فقط): تصحيح الدروس والأسئلة والبطاقات مباشرة من لوحة الإدارة.
 // كل حفظ يُنشئ نسخة جديدة من ملف النص (معرّف جديد) ثم يحدّث الفهرس، فيرى الطلبة التعديل فوراً،
 // وتبقى النسخة الأصلية محفوظة للرجوع إليها.
-import { getImage, uploadImage, loadManifest, uploadManifest } from './firebase.js?v=10';
-import { fmt, typeset } from './rich.js?v=10';
+import { getImage, uploadImage, loadManifest, uploadManifest, loadSubjects } from './firebase.js?v=11';
+import { fmt, typeset } from './rich.js?v=11';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -10,7 +10,8 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':
 const KIND = { official: 'رسمي', proposed: 'مقترح' };
 const SYMS = ['×', '·', '→', '⇌', '≈', '≤', '≥', '±', '°', 'Δ', 'λ', 'ν', 'μ', 'χ', 'σ', 'π', 'Ψ', 'ℓ', '⁻', '⁺', '½', 'Å'];
 
-let root = null, M = null, sel = { ch: 1, type: 'lesson', item: '' }, busy = false, dirty = false;
+let root = null, M = null, SUBS = [], MSS = {}, sel = { sub: '', ch: 1, type: 'lesson', item: '' }, busy = false, dirty = false;
+const docOf = (k) => (SUBS.find((x) => x.key === k) || { doc: 'manifest' }).doc;
 let T = null, CH = null, CUR = null, CARDS = null;
 
 export function mountEditor(el) {
@@ -21,7 +22,12 @@ export function mountEditor(el) {
   init();
 }
 async function init() {
-  try { M = await loadManifest(); } catch (e) { M = null; }
+  try { SUBS = await loadSubjects(); } catch (e) { SUBS = [{ key: 'gen', doc: 'manifest', en: 'General Chemistry', ar: 'الكيمياء العامة' }]; }
+  MSS = {};
+  for (const x of SUBS) { try { const m = await loadManifest(x.doc); if (m && m.chapters && m.chapters.length) MSS[x.key] = m; } catch (e) {} }
+  SUBS = SUBS.filter((x) => MSS[x.key]);
+  if (!sel.sub || !MSS[sel.sub]) sel.sub = SUBS.length ? SUBS[0].key : '';
+  M = MSS[sel.sub] || null;
   if (!M || !M.chapters) { $('#edsel').innerHTML = '<p class="small">ارفع المحتوى أولاً لتتمكن من تحريره.</p>'; return; }
   renderSel();
 }
@@ -46,7 +52,8 @@ function renderSel() {
   if (its.length && !its.some((x) => x[0] === sel.item)) sel.item = its[0][0];
   const edited = ch.textBase ? '<span class="badge-ed">نص معدّل</span>' : '';
   $('#edsel').innerHTML =
-    '<select class="input" id="e_ch" aria-label="الشابيطر">' + M.chapters.map((c) => '<option value="' + c.id + '"' + (c.id === ch.id ? ' selected' : '') + '>CH ' + c.id + ' · ' + esc(c.ar) + '</option>').join('') + '</select>' +
+    (SUBS.length > 1 ? '<select class="input" id="e_sub" aria-label="المادة">' + SUBS.map((x) => '<option value="' + esc(x.key) + '"' + (x.key === sel.sub ? ' selected' : '') + '>' + esc(x.ar) + '</option>').join('') + '</select>' : '') +
+    '<select class="input" id="e_ch" aria-label="الشابيطر">' + M.chapters.map((c) => '<option value="' + c.id + '"' + (c.id === ch.id ? ' selected' : '') + '>CH ' + (c.num || c.id) + ' · ' + esc(c.ar) + '</option>').join('') + '</select>' +
     '<select class="input" id="e_ty" aria-label="النوع">' + [['lesson', 'درس'], ['question', 'سؤال كيسيام'], ['cards', 'بطاقات المراجعة']].map((x) => '<option value="' + x[0] + '"' + (x[0] === sel.type ? ' selected' : '') + '>' + x[1] + '</option>').join('') + '</select>' +
     (its.length ? '<select class="input" id="e_it" aria-label="العنصر" dir="ltr">' + its.map((x) => '<option value="' + x[0] + '"' + (x[0] === sel.item ? ' selected' : '') + '>' + esc(x[1]) + '</option>').join('') + '</select>' : '') +
     '<button type="button" class="btn pri" id="e_open">فتح للتحرير</button>' + edited +
@@ -193,7 +200,7 @@ function preview() {
 
 /* ---------- الحفظ ---------- */
 const stamp = () => Date.now().toString(36);
-async function freshChapter() { const cur = await loadManifest(); const c = cur.chapters.find((x) => x.id === CH.id); return [cur, c]; }
+async function freshChapter() { const cur = await loadManifest(docOf(sel.sub)); const c = cur.chapters.find((x) => x.id === CH.id); return [cur, c]; }
 async function save() {
   if (busy) return;
   const msg = $('#e_msg'), btn = $('#e_save');
@@ -208,7 +215,7 @@ async function save() {
       const [cur, c] = await freshChapter();
       if (c.flash && !c.flashBase) c.flashBase = c.flash;
       c.flash = id;
-      await uploadManifest(cur); M = cur; CH = c; CARDS = cards;
+      await uploadManifest(cur, docOf(sel.sub)); M = cur; MSS[sel.sub] = cur; CH = c; CARDS = cards;
     } else {
       let ansFix = null;
       if (CUR.kind === 'lesson') {
@@ -236,7 +243,7 @@ async function save() {
         c.qcm.forEach((s) => s.q.forEach((q) => { if ('c' + c.id + s.key[0] + q.n === CUR.key) q.ans = ansFix; }));
         CUR.q.ans = ansFix;
       }
-      await uploadManifest(cur); M = cur; CH = c;
+      await uploadManifest(cur, docOf(sel.sub)); M = cur; MSS[sel.sub] = cur; CH = c;
     }
     dirty = false;
     say('✓ حُفظ. يظهر التعديل للطلبة عند فتح الموقع من جديد.', true);
@@ -248,7 +255,7 @@ async function revert(field) {
   const [cur, c] = await freshChapter();
   if (field === 'text' && c.textBase) { c.text = c.textBase; delete c.textBase; }
   if (field === 'flash' && c.flashBase) { c.flash = c.flashBase; delete c.flashBase; }
-  await uploadManifest(cur); M = cur;
+  await uploadManifest(cur, docOf(sel.sub)); M = cur; MSS[sel.sub] = cur;
   $('#edarea').innerHTML = '<p class="okmsg">✓ رجعت النسخة الأصلية.</p>';
   renderSel();
 }
@@ -258,6 +265,7 @@ let armed = null;
 document.addEventListener('change', (e) => {
   if (!root || !root.contains(e.target)) return;
   const t = e.target;
+  if (t.id === 'e_sub') { sel.sub = t.value; M = MSS[sel.sub]; sel.ch = M.chapters[0].id; sel.item = ''; renderSel(); $('#edarea').innerHTML = ''; return; }
   if (t.id === 'e_ch' || t.id === 'e_ty' || t.id === 'e_it') {
     if (t.id === 'e_ch') sel.ch = +t.value;
     if (t.id === 'e_ty') sel.type = t.value;

@@ -2,8 +2,9 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
-} from './firebase.js?v=15';
-import { fmt, typeset } from './rich.js?v=15';
+} from './firebase.js?v=16';
+import { fmt, typeset } from './rich.js?v=16';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=16';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -35,9 +36,15 @@ const allCh = () => SUBJ.reduce((a, x) => a.concat(MS[x.key] ? MS[x.key].chapter
 const chById = (id) => allCh().find((c) => c.id === id) || { id: id };
 const inS = (k) => !!(ITEMS[k] && ITEMS[k].ch.sub === CURS);
 const subj = (key) => SUBJ.find((x) => x.key === (key || CURS)) || { key: '', en: 'General Chemistry', ar: 'الكيمياء العامة' };
+// لون وزخرفة المادة الحالية على كامل الموقع
+function applyTheme() {
+  const t = theme(CURS), r = document.documentElement.style;
+  document.documentElement.dataset.subj = CURS || 'gen';
+  r.setProperty('--sa', t.a); r.setProperty('--sb', t.b); r.setProperty('--sc', t.c); r.setProperty('--motif', subjMotif(CURS));
+}
 function setSubject(key) {
   if (!MS[key] || (key === CURS && M === MS[key])) return;
-  CURS = key; M = MS[key];
+  CURS = key; M = MS[key]; applyTheme();
   try { localStorage.setItem('gueschemi.subject', key); } catch (e) {}
   IDX = null; exForm = null; revLists = {}; revRes = {};
   const sm = $('.brand small'); if (sm) sm.textContent = subj().en + ' · 1st-year Pharmacy';
@@ -195,7 +202,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 15;
+const APP_V = 16;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -276,7 +283,7 @@ async function onUser(u) {
       SUBJ = SL.filter((x) => MS[x.key]);
       let want = ''; try { want = localStorage.getItem('gueschemi.subject') || ''; } catch (e) {}
       CURS = MS[want] ? want : (SUBJ[0] ? SUBJ[0].key : '');
-      M = MS[CURS] || null;
+      M = MS[CURS] || null; applyTheme();
       if (!unwatch) { const us = SUBJ.map((x) => watchManifest((nm) => onManifest(x.key, nm), x.doc)); unwatch = () => us.forEach((f) => f && f()); }
       if (!M || !M.chapters || !M.chapters.length) {
         renderUser();
@@ -420,7 +427,7 @@ function side(r) {
 }
 function subjTabs(where) {
   if (SUBJ.length < 2) return '';
-  return '<div class="subjtabs ' + where + '" role="tablist" aria-label="المادة">' + SUBJ.map((x) => '<a role="tab" class="st' + (x.key === CURS ? ' on' : '') + '" aria-selected="' + (x.key === CURS) + '" href="#/s/' + esc(x.key) + '"><b>' + esc(x.ar) + '</b><small class="lat">' + esc(x.en) + '</small></a>').join('') + '</div>';
+  return '<div class="subjtabs ' + where + '" role="tablist" aria-label="المادة">' + SUBJ.map((x) => '<a role="tab" class="st' + (x.key === CURS ? ' on' : '') + '" aria-selected="' + (x.key === CURS) + '" href="#/s/' + esc(x.key) + '" style="--ta:' + theme(x.key).a + '">' + subjIcon(x.key) + '<span class="stt"><b>' + esc(x.ar) + '</b><small class="lat">' + esc(x.en) + '</small></span></a>').join('') + '</div>';
 }
 function openSide() { SIDE.classList.add('show'); $('#scrim').hidden = false; }
 function closeSide() { SIDE.classList.remove('show'); $('#scrim').hidden = true; }
@@ -470,7 +477,7 @@ function home() {
     const s = chStats(ch); tp += s.pages; tr += s.read; tq += s.qn; ta += s.qa; tok += s.qok;
     const off = ch.qcm.find((x) => x.key === 'official'), pro = ch.qcm.find((x) => x.key === 'proposed');
     return '<a class="ccard" href="#/c/' + ch.id + '" style="--c:var(--c' + ch.id + ')">' +
-      '<span class="cnum"><small>CH</small><b class="lat">' + cn(ch) + '</b></span>' +
+      '<span class="cnum"><small>CH</small><b class="lat">' + cn(ch) + '</b></span>' + '<span class="cart">' + chArt(ch) + '</span>' +
       '<span class="ctx"><span class="lat en">' + esc(ch.en) + '</span><span class="ar">' + esc(ch.ar) + '</span><span class="tp lat">' + esc(ch.topics) + '</span>' +
       '<span class="facts">' + (ch.share != null ? '<span><b class="lat">' + ch.share + '%</b> من الامتحان</span>' : '') + '<span><b class="lat">' + s.pages + '</b> صفحة</span><span><b class="lat">' + (off ? off.q.length : 0) + '</b> رسمي</span><span><b class="lat">' + (pro ? pro.q.length : 0) + '</b> مقترح</span></span>' +
       '<span class="pbar"><i style="width:' + pct(s.read, s.pages) + '%"></i></span><span class="pl">الدروس <b class="lat">' + s.read + '/' + s.pages + '</b> · الكيسيام <b class="lat">' + s.qa + '/' + s.qn + '</b>' + (s.qa ? ' · صحيح <b class="lat">' + pct(s.qok, s.qa) + '%</b>' : '') + '</span></span></a>';
@@ -479,12 +486,12 @@ function home() {
   const first = (me.name || '').split(' ')[0];
   const nw = wrongKeys().length, nf = favKeys().length + favPages().length, nd = dueKeys().length, lastEx = prog.hist[0];
   VIEW.innerHTML =
-    '<div class="hero"><div class="hero-in">' + subjTabs('hero') + '<p class="kick lat">' + esc(subj().en) + ' · 1st-year Pharmacy</p>' +
+    '<div class="hero"><div class="hero-art">' + subjIcon(CURS, 'hico') + '</div><div class="hero-in">' + subjTabs('hero') + '<p class="kick lat">' + subjIcon(CURS, 'kico') + esc(subj().en) + ' · 1st-year Pharmacy</p>' +
     '<h1>' + (first ? 'أهلاً ' + esc(first) + '، ' : '') + esc(subj().ar) + ' كاملة، شابيطر بشابيطر</h1>' +
     '<p class="lead">اقرأ كل درس مكتوباً، حلّ كيسيام الامتحانات والكيسيام المقترح، راجع أخطاءك كل يوم، ثم اختبر نفسك في امتحان تجريبي بالوقت.</p>' +
-    '<form class="hsearch" data-search><input type="search" name="q" placeholder="' + (CURS === 'org' ? 'ابحث في الدروس والأسئلة… مثلاً hybridization أو alkene' : 'ابحث في الدروس والأسئلة… مثلاً Slater أو هوند') + '" aria-label="بحث" autocomplete="off"><button type="submit" class="btn pri">بحث</button></form>' +
+    '<form class="hsearch" data-search><input type="search" name="q" placeholder="ابحث في الدروس والأسئلة… مثلاً ' + ({ org: 'hybridization أو alkene', bio: 'Gram أو virus', stat: 'median أو variance', ana: 'sagittal أو تشريح' }[CURS] || 'Slater أو هوند') + '" aria-label="بحث" autocomplete="off"><button type="submit" class="btn pri">بحث</button></form>' +
     '<div class="kpis"><span><b class="lat">' + nOff + '</b>كيسيام رسمي محلول</span><span><b class="lat">' + nPro + '</b>كيسيام مقترح</span><span><b class="lat">' + tp + '</b>صفحة دروس</span><span><b class="lat">' + M.chapters.length + '</b>شابيطرات</span></div>' +
-    '<p class="acts">' + (prog.last ? '<a class="btn pri" href="' + esc(prog.last) + '">تابع من حيث توقفت ←</a>' : '<a class="btn pri" href="#/c/1">ابدأ بالشابيطر الأول ←</a>') + '<a class="btn ghost" href="#/exam">امتحان تجريبي</a></p>' +
+    '<p class="acts">' + (prog.last ? '<a class="btn pri" href="' + esc(prog.last) + '">تابع من حيث توقفت ←</a>' : '<a class="btn pri" href="#/c/' + M.chapters[0].id + '">ابدأ بالشابيطر الأول ←</a>') + '<a class="btn ghost" href="#/exam">امتحان تجريبي</a></p>' +
     '</div></div>' +
     '<div class="wrap"><div class="overall card"><div><b>تقدّمك العام</b>' + cloudBadge() + '</div>' +
     '<div class="ov"><span>الدروس</span><span class="pbar"><i style="width:' + pct(tr, tp) + '%"></i></span><b class="lat">' + pct(tr, tp) + '%</b></div>' +
@@ -525,7 +532,7 @@ function chapter(ch) {
       '<span class="pbar"><i style="width:' + pct(a, set.q.length) + '%"></i></span><span class="pl">' + (a ? 'أجبت عن <b class="lat">' + a + '/' + set.q.length + '</b> · صحيح <b class="lat">' + ok + '</b>' : 'لم تبدأ بعد') + '</span><span class="go">' + (a && a < set.q.length ? 'تابع' : a ? 'راجع' : 'ابدأ') + ' ←</span></a>';
   }).join('');
   const nw = wrongKeys(ch.id).length;
-  VIEW.innerHTML = '<div class="chero" style="--c:var(--c' + ch.id + ')"><div class="wrap chero-in"><div class="ctext"><nav class="crumb inv"><a href="#/">الرئيسية</a><span>›</span><b>CH ' + cn(ch) + '</b></nav>' +
+  VIEW.innerHTML = '<div class="chero" style="--c:var(--c' + ch.id + ')"><div class="chart-bg">' + chArt(ch, 'art big') + '</div><div class="wrap chero-in"><div class="ctext"><nav class="crumb inv"><a href="#/">الرئيسية</a><span>›</span><b>CH ' + cn(ch) + '</b></nav>' +
     '<p class="kick lat">Chapter ' + cn(ch) + '</p><h1><span class="lat">' + esc(ch.en) + '</span><span class="ar">' + esc(ch.ar) + '</span></h1><p class="tp lat">' + esc(ch.topics) + '</p>' +
     (ch.share != null ? '<div class="chips"><span><b class="lat">' + ch.share + '%</b> من أسئلة الامتحان</span><span>الترتيب <b class="lat">#' + ch.rank + '</b></span><span><b class="lat">' + ch.app + '</b> ظهوراً في الامتحانات</span></div>' : '<div class="chips"><span><b class="lat">' + FLOW[ch.id].length + '</b> صفحة</span><span><b class="lat">' + ch.qcm.reduce((a, x) => a + x.q.length, 0) + '</b> سؤال كيسيام</span></div>') +
     '<p class="acts"><a class="btn pri" href="#/c/' + ch.id + '/p/' + FLOW[ch.id][0].n + '">' + (s.read ? 'تابع الدروس' : 'ابدأ الدرس') + ' ←</a><a class="btn ghost" href="#/c/' + ch.id + '/q/official">كيسيام الامتحانات</a></p></div>' +
@@ -551,7 +558,7 @@ function page(ch, i) {
   const nav = (x, dir) => x ? '<a class="pn ' + dir + '" data-nav="' + dir + '" href="#/c/' + ch.id + '/p/' + x.n + '"><small>' + (dir === 'prev' ? '→ السابق' : 'التالي ←') + '</small><span class="lat">' + esc(x.t) + '</span></a>' : '<span class="pn empty"></span>';
   const endNext = next ? nav(next, 'next') : '<a class="pn next" data-nav="next" href="#/c/' + ch.id + '/q/official"><small>انتهت الدروس ←</small><span>انتقل إلى كيسيام الامتحانات</span></a>';
   VIEW.innerHTML = '<div class="wrap reader">' + crumbs([['CH ' + cn(ch) + ' · ' + esc(ch.ar), '#/c/' + ch.id], [esc(p.secAr)]]) +
-    '<header class="rhead" style="--c:var(--c' + ch.id + ')"><div><p class="kick"><span>' + esc(p.secAr) + '</span>' + (p.rev ? '' : '<span class="lat"> · ' + esc(p.sec) + '</span>') + '</p><h1 class="lat">' + esc(p.t) + '</h1><p class="artitle" dir="rtl" data-artitle></p></div>' +
+    '<header class="rhead" style="--c:var(--c' + ch.id + ')"><span class="rart">' + chArt(ch) + '</span><div><p class="kick"><span>' + esc(p.secAr) + '</span>' + (p.rev ? '' : '<span class="lat"> · ' + esc(p.sec) + '</span>') + '</p><h1 class="lat">' + esc(p.t) + '</h1><p class="artitle" dir="rtl" data-artitle></p></div>' +
     '<div class="rmeta">' + star('p' + p.n, true) + '<span class="lat" dir="ltr">' + k + ' / ' + secPages.length + '</span><span class="sep"></span><span>صفحة <b class="lat">' + (i + 1) + '</b> من <b class="lat">' + list.length + '</b></span></div></header>' +
     '<div class="rbar"><i style="width:' + pct(i + 1, list.length) + '%;background:var(--c' + ch.id + ')"></i></div>' +
     '<div class="rtools">' + modeSwitch('p') + '</div>' +

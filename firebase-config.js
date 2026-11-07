@@ -6,3 +6,7 @@ export const firebaseConfig = {
   projectId: "gues-chemi-2",
   appId: "1:504616937484:web:6c1d1c4c9b1d96152f2629"
 };
+
+// App Check: يجعل Firebase يرفض أي طلب لا يأتي من موقعك (حتى لو نُسخ المفتاح أعلاه).
+// الصق هنا «مفتاح الموقع» (site key) من reCAPTCHA v3، واتركه فارغاً لتعطيله.
+export const appCheckSiteKey = "";

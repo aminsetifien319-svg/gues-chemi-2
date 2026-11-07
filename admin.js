@@ -1,9 +1,9 @@
 // لوحة الإدارة: قبول الطلبة، إدارة القائمة، ورفع المحتوى (الفهرس + حزم الصور) إلى Firestore.
 import {
   watchUser, signIn, signOutUser, isAdminUser, listRequests, listAllowed,
-  approve, reject, removeAllowed, addAllowed, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, loadSubjects, saveSubjects, DEFAULT_SUBJECTS, configMissing
-} from './firebase.js?v=11';
-import { mountEditor } from './editor.js?v=11';
+  approve, reject, removeAllowed, addAllowed, authAgeHours, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, loadSubjects, saveSubjects, DEFAULT_SUBJECTS, configMissing
+} from './firebase.js?v=15';
+import { mountEditor } from './editor.js?v=15';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const box = $('#box');
@@ -29,9 +29,17 @@ async function render(u) {
   box.innerHTML = '<p>جارٍ التحقق…</p>';
   try {
     if (!(await isAdminUser(u.email))) {
-      gate('<h1>ليست لديك صلاحية</h1><p>الحساب <bdi class="lat">' + esc(u.email) + '</bdi> ليس مشرفاً. أضِف بريدك في المجموعة <b class="lat">admins</b> داخل Firestore.</p>');
+      gate('<h1>ليست لديك صلاحية</h1><p>هذه الصفحة للمشرف فقط.</p><p class="acts" style="justify-content:center"><a class="btn pri" href="index.html">العودة للموقع</a></p>');
+      await signOutUser().catch(() => {});
       return;
     }
+    // أمان المشرف: دخول حديث (أقل من 12 ساعة)، وإلا نطلب تسجيل الدخول من جديد
+    let age = 0; try { age = await authAgeHours(); } catch (e) {}
+    if (age > MAX_AGE_H) {
+      gate('<h1>تأكيد الهوية</h1><p>لحماية لوحة الإدارة، سجّل الدخول من جديد (آخر دخول منذ أكثر من ' + MAX_AGE_H + ' ساعة).</p><p class="acts" style="justify-content:center"><button type="button" class="btn pri" id="relogin">تسجيل الدخول من جديد</button></p>');
+      return;
+    }
+    armIdle();
     await refresh();
     if (!edMounted) { edMounted = true; mountEditor($('#ed')); }
   } catch (err) { gate('<h1>حدث خطأ</h1><p class="err">' + esc(err && err.message ? err.message : err) + '</p>'); }
@@ -200,8 +208,17 @@ async function uploadPatch(packs) {
 }
 
 let armed = null, armTimer = 0;
+// خروج تلقائي بعد 30 دقيقة دون نشاط
+const MAX_AGE_H = 12, IDLE_MIN = 30;
+let idleT = 0;
+function armIdle() {
+  clearTimeout(idleT);
+  idleT = setTimeout(async () => { if (busy) { armIdle(); return; } await signOutUser().catch(() => {}); gate('<h1>انتهت الجلسة</h1><p>خرجتَ تلقائياً بعد ' + IDLE_MIN + ' دقيقة دون نشاط، لحماية لوحة الإدارة.</p><p class="acts" style="justify-content:center"><button type="button" class="btn pri" id="login">الدخول بحساب Google</button></p>'); }, IDLE_MIN * 60000);
+}
+['click', 'keydown', 'input', 'pointermove'].forEach((ev) => document.addEventListener(ev, () => { if (me) armIdle(); }, { passive: true }));
 document.addEventListener('click', async (e) => {
   const t = e.target;
+  if (t.id === 'relogin') { try { await signOutUser(); await signIn(); } catch (err) { gate('<h1>تعذّر الدخول</h1><p class="err">' + esc(err.message || err) + '</p>'); } return; }
   if (t.id === 'out') { await signOutUser(); return; }
   if (t.id === 'login') { try { await signIn(); } catch (err) { if (!(err && err.code === 'auth/popup-closed-by-user')) gate('<h1>تعذّر الدخول</h1><p class="err">' + esc(err.message || err) + '</p>'); } return; }
   if (t.id === 'add') {

@@ -2,8 +2,8 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
-} from './firebase.js?v=11';
-import { fmt, typeset } from './rich.js?v=11';
+} from './firebase.js?v=15';
+import { fmt, typeset } from './rich.js?v=15';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -195,7 +195,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 11;
+const APP_V = 15;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -297,8 +297,8 @@ function start(remote) {
   SUBJ.forEach((sj) => { const MM = MS[sj.key]; const FIX = (MM.fix && MM.fix.ans) || {}; MM.chapters.forEach((ch) => {   // كل المواد معاً (وتصحيحات الأجوبة من المحرّر)
     ch.sub = sj.key;
     const list = [];
-    ch.sections.forEach((s) => s.pages.forEach((p) => list.push({ img: p.img, n: p.n, t: p.t, sec: s.en, secAr: s.ar, rev: false })));
-    ch.revision.forEach((p) => list.push({ img: p.img, n: p.n, t: p.t, sec: 'Revision', secAr: p.ar || 'المراجعة', rev: true }));
+    ch.sections.forEach((s) => s.pages.forEach((p) => list.push({ img: p.img, imgs: p.imgs, n: p.n, t: p.t, sec: s.en, secAr: s.ar, rev: false })));
+    ch.revision.forEach((p) => list.push({ img: p.img, imgs: p.imgs, n: p.n, t: p.t, sec: 'Revision', secAr: p.ar || 'المراجعة', rev: true }));
     FLOW[ch.id] = list;
     ch.qcm.forEach((set) => {
       const s = sk(ch.id, set.key); SETKEYS[s] = [];
@@ -416,7 +416,7 @@ function side(r) {
     }
     h += '</div>';
   });
-  SIDE.innerHTML = h + '</nav>';
+  SIDE.innerHTML = h + '</nav><p class="copy">© Gues Chemi · جميع الحقوق محفوظة<br>المحتوى محمي ومرتبط بحسابك<br><bdi class="lat">' + esc(me ? me.email : '') + '</bdi></p>';
 }
 function subjTabs(where) {
   if (SUBJ.length < 2) return '';
@@ -432,10 +432,11 @@ let wmUrl = '';
 function watermark() {
   if (wmUrl) return wmUrl;
   const t = esc(me ? me.email : '');
-  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="200"><text x="20" y="120" transform="rotate(-18 180 100)" font-family="Arial" font-size="15" fill="rgba(10,26,51,0.11)">' + t + '</text></svg>';
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="200"><text x="20" y="120" transform="rotate(-18 180 100)" font-family="Arial" font-size="15" fill="rgba(120,132,150,0.14)">' + t + '</text></svg>';
   wmUrl = 'url("data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) + '")';
   return wmUrl;
 }
+function origFigs(ch, p) { return [p.img].concat(p.imgs || []).map((im) => fig(im, 'zoomable page' + (ch.ratio ? ' tall' : ''), ch.ratio || '16 / 9')).join(''); }
 function fig(id, cls, ratio) {
   return '<figure class="pg ' + (cls || '') + '" data-img="' + esc(id) + '" style="aspect-ratio:' + (ratio || '16 / 9') + '"><span class="sk"></span><i class="wm"></i></figure>';
 }
@@ -528,7 +529,7 @@ function chapter(ch) {
     '<p class="kick lat">Chapter ' + cn(ch) + '</p><h1><span class="lat">' + esc(ch.en) + '</span><span class="ar">' + esc(ch.ar) + '</span></h1><p class="tp lat">' + esc(ch.topics) + '</p>' +
     (ch.share != null ? '<div class="chips"><span><b class="lat">' + ch.share + '%</b> من أسئلة الامتحان</span><span>الترتيب <b class="lat">#' + ch.rank + '</b></span><span><b class="lat">' + ch.app + '</b> ظهوراً في الامتحانات</span></div>' : '<div class="chips"><span><b class="lat">' + FLOW[ch.id].length + '</b> صفحة</span><span><b class="lat">' + ch.qcm.reduce((a, x) => a + x.q.length, 0) + '</b> سؤال كيسيام</span></div>') +
     '<p class="acts"><a class="btn pri" href="#/c/' + ch.id + '/p/' + FLOW[ch.id][0].n + '">' + (s.read ? 'تابع الدروس' : 'ابدأ الدرس') + ' ←</a><a class="btn ghost" href="#/c/' + ch.id + '/q/official">كيسيام الامتحانات</a></p></div>' +
-    '<div class="ccover">' + fig(ch.cover, 'cover', '16 / 9') + '</div></div></div>' +
+    '<div class="ccover' + (ch.ratio ? ' tall' : '') + '">' + fig(ch.cover, 'cover', ch.ratio || '16 / 9') + '</div></div></div>' +
     '<div class="wrap"><div class="cprog card"><div class="ov"><span>الدروس المقروءة</span><span class="pbar"><i style="width:' + pct(s.read, s.pages) + '%"></i></span><b class="lat">' + s.read + '/' + s.pages + '</b></div>' +
     '<div class="ov"><span>الكيسيام المحلول</span><span class="pbar"><i style="width:' + pct(s.qa, s.qn) + '%"></i></span><b class="lat">' + s.qa + '/' + s.qn + '</b></div></div>' +
     '<h2 class="h2">الدروس</h2><div class="secs">' + secs + '</div>' +
@@ -554,7 +555,7 @@ function page(ch, i) {
     '<div class="rmeta">' + star('p' + p.n, true) + '<span class="lat" dir="ltr">' + k + ' / ' + secPages.length + '</span><span class="sep"></span><span>صفحة <b class="lat">' + (i + 1) + '</b> من <b class="lat">' + list.length + '</b></span></div></header>' +
     '<div class="rbar"><i style="width:' + pct(i + 1, list.length) + '%;background:var(--c' + ch.id + ')"></i></div>' +
     '<div class="rtools">' + modeSwitch('p') + '</div>' +
-    '<div class="lbody" id="lbody">' + (viewMode === 'orig' || !ch.text ? fig(p.img, 'zoomable page', '16 / 9') + '<p class="hint"><button type="button" class="btn sm" data-zoom>⤢ تكبير وملء الشاشة</button><span>على الهاتف: أدِر الشاشة أفقياً أو استعمل زر التكبير.</span></p>' : loading) + '</div>' +
+    '<div class="lbody" id="lbody">' + (viewMode === 'orig' || !ch.text ? origFigs(ch, p) + '<p class="hint"><button type="button" class="btn sm" data-zoom>⤢ تكبير وملء الشاشة</button><span>على الهاتف: أدِر الشاشة أفقياً أو استعمل زر التكبير.</span></p>' : loading) + '</div>' +
     '<div class="pnav">' + nav(prev, 'prev') + endNext + '</div></div>';
   hydrate();
   chText(ch).then((T) => {
@@ -562,10 +563,10 @@ function page(ch, i) {
     const P = T.pages[p.n];
     const at = $('[data-artitle]'); if (at && P && P.ar) at.textContent = P.ar;
     if (viewMode !== 'orig' && P) {
-      $('#lbody').innerHTML = '<article class="lesson" style="--c:var(--c' + ch.id + ')">' + fmt(P.html) + '</article>';
+      $('#lbody').innerHTML = '<article class="lesson" style="--c:var(--c' + ch.id + ')"><i class="wm tw"></i>' + fmt(P.html) + '</article>';
       hydrate($('#lbody'));
     }
-  }).catch(() => { if (rid === renderId && viewMode !== 'orig') { $('#lbody').innerHTML = fig(p.img, 'zoomable page', '16 / 9'); hydrate(); } });
+  }).catch(() => { if (rid === renderId && viewMode !== 'orig') { $('#lbody').innerHTML = origFigs(ch, p); hydrate(); } });
   prefetch(next && next.img);
 }
 
@@ -616,7 +617,7 @@ function qscreen(ctx) {
   const textMode = !!it.ch.text;   // الأسئلة دائماً مكتوبة (الصورة تُستعمل فقط إن تعذّر النص)
   VIEW.innerHTML = '<div class="wrap quiz' + (live ? ' live' : '') + '" style="--c:var(--c' + (mode === 'practice' ? it.ch.id : 0) + ',var(--cyan2))">' + ctx.top +
     '<div class="qchips" aria-label="الأسئلة">' + chips + '</div>' +
-    '<article class="qcard"><div class="qtop"><span class="qn">السؤال <b class="lat">' + (i + 1) + '</b> من <b class="lat">' + keys.length + '</b></span>' + src + years + (ctx.qtimer || '') + star(key) + '</div>' +
+    '<article class="qcard"><i class="wm tw"></i><div class="qtop"><span class="qn">السؤال <b class="lat">' + (i + 1) + '</b> من <b class="lat">' + keys.length + '</b></span>' + src + years + (ctx.qtimer || '') + star(key) + '</div>' +
     '<div id="qbody">' + (textMode ? loading : fig(q.q, 'qimg zoomable', '9 / 4') + '<p class="zhint">اضغط على السؤال لتكبيره</p>') + '</div>' +
     '<div class="opick"><p>' + (r ? 'إجابتك:' : live ? 'اختر الإجابة أو الإجابات (تُحفظ تلقائياً، والتصحيح بعد التسليم):' : 'اختر الإجابة أو الإجابات الصحيحة (قد تكون أكثر من واحدة):') + '</p>' + (textMode ? '' : letterRow(q, sel, r, locked)) + action + '</div>' +
     verdict + (r ? '<div class="sol"><p class="solh">الحل والشرح</p><div id="sbody">' + (textMode ? loading : fig(q.s, 'simg zoomable', '9 / 3')) + '</div></div>' : '') +

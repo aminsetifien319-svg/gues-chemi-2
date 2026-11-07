@@ -11,15 +11,15 @@ export function fmt(h) {
     .replace(/<sup>([0-9]{1,3})<\/sup><sub>([−\-]?[0-9]{1,3})<\/sub>(?=(?:<\/b>)?[A-Za-z])/g, (m, a, z) => pre(a, z));
 }
 
-const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/';
+const CDN = '';   // KaTeX مستضاف داخل الموقع (لا اعتماد على خادم خارجي)
 let KX = null;
 function addScript(src) {
-  return new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.crossOrigin = 'anonymous'; s.onload = ok; s.onerror = ko; document.head.appendChild(s); });
+  return new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); });
 }
 export function loadKatex() {
   if (KX) return KX;
-  const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = CDN + 'katex.min.css'; l.crossOrigin = 'anonymous'; document.head.appendChild(l);
-  KX = addScript(CDN + 'katex.min.js').then(() => addScript(CDN + 'contrib/mhchem.min.js')).then(() => addScript(CDN + 'contrib/auto-render.min.js'));
+  const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = CDN + 'katex.min.css?v=15'; document.head.appendChild(l);
+  KX = addScript(CDN + 'katex.min.js?v=15').then(() => addScript(CDN + 'katex-mhchem.min.js?v=15')).then(() => addScript(CDN + 'katex-auto-render.min.js?v=15'));
   KX.catch(() => { KX = null; });
   return KX;
 }

@@ -7,13 +7,20 @@ import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache,
   doc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-import { firebaseConfig } from './firebase-config.js';
+import * as CFG from './firebase-config.js?v=15';
+const firebaseConfig = CFG.firebaseConfig;
 
 export const configMissing = !firebaseConfig.apiKey || String(firebaseConfig.apiKey).indexOf('PASTE') === 0;
 
 let auth = null, db = null;
 if (!configMissing) {
   const app = initializeApp(firebaseConfig);
+  if (CFG.appCheckSiteKey) {
+    // يُحمَّل فقط عند تفعيله، حتى لا يتعطل الموقع إن لم يُضبط
+    import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-check.js').then((m) => {
+      try { m.initializeAppCheck(app, { provider: new m.ReCaptchaV3Provider(CFG.appCheckSiteKey), isTokenAutoRefreshEnabled: true }); } catch (e) {}
+    }).catch(() => {});
+  }
   auth = getAuth(app);
   // نخزّن الصور في ذاكرة المتصفح بعد أول تحميل حتى لا تُحمَّل كل مرة (أسرع وأوفر).
   try {
@@ -48,6 +55,12 @@ export async function signIn() {
   }
 }
 
+// كم ساعة مرّت منذ آخر تسجيل دخول فعلي (وليس منذ فتح الصفحة)
+export async function authAgeHours() {
+  const u = auth && auth.currentUser; if (!u) return 1e9;
+  const r = await u.getIdTokenResult();
+  return (Date.now() / 1000 - Number(r.claims.auth_time || 0)) / 3600;
+}
 export function signOutUser() { return signOut(auth); }
 
 /* ---------- صلاحية الطالب ---------- */
@@ -63,7 +76,7 @@ export async function getAccess(email) {
 export async function sendRequest(user) {
   await setDoc(doc(db, 'requests', user.email), {
     email: user.email,
-    name: user.name || '',
+    name: String(user.name || '').slice(0, 100),
     createdAt: serverTimestamp()
   });
 }

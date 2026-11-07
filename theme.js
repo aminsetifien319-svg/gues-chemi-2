@@ -1,3 +1,5 @@
+// يمنع عرض الموقع داخل إطار موقع آخر (clickjacking).
+if (window.top !== window.self) { try { window.top.location.replace(window.self.location.href); } catch (e) { document.documentElement.style.display = 'none'; } }
 // الوضع الليلي: يتبع إعداد الجهاز أول مرة، ثم يتذكّر اختيار الطالب.
 (function () {
   var K = 'gueschemi.theme', d = document.documentElement, t = null;

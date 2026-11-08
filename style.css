@@ -826,3 +826,9 @@ html[data-theme="dark"] .lesson .yr{background:#3a2c10;color:#f3cf86;border-colo
 .subjtabs.insd .st small{display:none}
 .subjtabs.insd .st b{font-size:12px}
 .subjtabs.insd .sico{width:22px;height:22px;padding:2px}
+
+.verdict.open{background:#fff7e6;border-color:#f0c36d;color:#7a4b00}
+.verdict.open a{font-weight:700;color:var(--sa,#b86e00);text-decoration:underline}
+html[data-theme="dark"] .verdict.open{background:#3a2c10;color:#f3cf86;border-color:#5a4520}
+.yrs.nokey{background:#fff3d6;color:#7a4b00;border-radius:999px;padding:1px 8px}
+html[data-theme="dark"] .yrs.nokey{background:#3a2c10;color:#f3cf86}

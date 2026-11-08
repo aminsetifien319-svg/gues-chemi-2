@@ -2,9 +2,9 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
-} from './firebase.js?v=16';
-import { fmt, typeset } from './rich.js?v=16';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=16';
+} from './firebase.js?v=17';
+import { fmt, typeset } from './rich.js?v=17';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=17';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -102,6 +102,8 @@ function cloudBadge() {
 }
 
 const res = (key) => { const x = prog.a[key]; return x && !x.d && x.s ? x : null; };
+// سؤال بلا تصحيح في الملف الأصلي: يُعرض للتدريب لكن لا يُحسب صحيحاً أو خاطئاً ولا يدخل الامتحان
+const isOpen = (key) => !!(ITEMS[key] && !ITEMS[key].q.ans);
 const isFav = (id) => { const x = prog.f[id]; return !!(x && x.on); };
 const startOfDay = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
 function srUpdate(key, ok, reviewing) {
@@ -113,6 +115,7 @@ function srUpdate(key, ok, reviewing) {
   prog.sr[key] = b >= SR_DAYS.length ? { b: b, done: 1, t: now() } : { b: b, due: startOfDay(now()) + SR_DAYS[b] * DAY, t: now() };
 }
 function setRes(key, s, reviewing) {
+  if (isOpen(key)) { prog.a[key] = { s: s, ok: false, open: 1, t: now() }; return null; }
   const ok = s === norm(ITEMS[key].q.ans);
   prog.a[key] = { s: s, ok: ok, t: now() };
   srUpdate(key, ok, reviewing);
@@ -125,10 +128,10 @@ const sk = (cid, kind) => 'c' + cid + kind[0];
 function chStats(ch) {
   const pages = FLOW[ch.id], read = pages.filter((p) => readP(p.n)).length;
   let qn = 0, qa = 0, qok = 0;
-  ch.qcm.forEach((set) => SETKEYS[sk(ch.id, set.key)].forEach((k) => { qn++; const x = res(k); if (x) { qa++; if (x.ok) qok++; } }));
+  ch.qcm.forEach((set) => SETKEYS[sk(ch.id, set.key)].forEach((k) => { if (isOpen(k)) return; qn++; const x = res(k); if (x) { qa++; if (x.ok) qok++; } }));
   return { pages: pages.length, read: read, qn: qn, qa: qa, qok: qok };
 }
-const wrongKeys = (cid) => Object.keys(ITEMS).filter((k) => (cid ? ITEMS[k].ch.id === cid : inS(k)) && res(k) && !res(k).ok);
+const wrongKeys = (cid) => Object.keys(ITEMS).filter((k) => (cid ? ITEMS[k].ch.id === cid : inS(k)) && !isOpen(k) && res(k) && !res(k).ok);
 const favKeys = () => Object.keys(ITEMS).filter((k) => inS(k) && isFav(k));
 const favPages = () => { const out = []; M.chapters.forEach((ch) => FLOW[ch.id].forEach((p) => { if (isFav('p' + p.n)) out.push({ ch: ch, p: p }); })); return out; };
 
@@ -202,7 +205,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 16;
+const APP_V = 17;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -585,9 +588,9 @@ function optRows(key, q, T, sel, r, locked) {
     const o = T && T.opts.find((x) => x.L === L);
     let c = 'orow';
     if (sel.indexOf(L) >= 0) c += ' on';
-    if (r) { const good = q.ans.indexOf(L) >= 0, picked = r.s.indexOf(L) >= 0; c += good && picked ? ' good' : good ? ' miss' : picked ? ' bad' : ' dim'; }
+    if (r && q.ans) { const good = q.ans.indexOf(L) >= 0, picked = r.s.indexOf(L) >= 0; c += good && picked ? ' good' : good ? ' miss' : picked ? ' bad' : ' dim'; } else if (r && r.s.indexOf(L) >= 0) c += ' on';
     const body = o ? '<span class="ot">' + (o.en ? '<span class="oe" dir="ltr">' + fmt(o.en) + '</span>' : '') + (o.ar ? '<span class="oa" dir="rtl">' + fmt(o.ar) + '</span>' : '') + (o.fig || '') + '</span>' : '<span class="ot"></span>';
-    const mark = r ? (q.ans.indexOf(L) >= 0 ? '<i class="om">✓</i>' : r.s.indexOf(L) >= 0 ? '<i class="om">✗</i>' : '') : '';
+    const mark = r && q.ans ? (q.ans.indexOf(L) >= 0 ? '<i class="om">✓</i>' : r.s.indexOf(L) >= 0 ? '<i class="om">✗</i>' : '') : '';
     return '<button type="button" class="' + c + '" data-opt="' + L + '"' + (locked ? ' disabled' : '') + ' aria-pressed="' + (sel.indexOf(L) >= 0) + '"><b class="ol lat">' + L + '</b>' + body + mark + '</button>';
   }).join('');
   return '<div class="olist" dir="ltr">' + opts + '</div>';
@@ -596,7 +599,7 @@ function letterRow(q, sel, r, locked) {
   return '<div class="opts">' + q.opts.split('').map((L) => {
     let c = 'opt';
     if (sel.indexOf(L) >= 0) c += ' on';
-    if (r) { const good = q.ans.indexOf(L) >= 0, picked = r.s.indexOf(L) >= 0; c += good && picked ? ' good' : good ? ' miss' : picked ? ' bad' : ' dim'; }
+    if (r && q.ans) { const good = q.ans.indexOf(L) >= 0, picked = r.s.indexOf(L) >= 0; c += good && picked ? ' good' : good ? ' miss' : picked ? ' bad' : ' dim'; }
     return '<button type="button" class="' + c + '" data-opt="' + L + '"' + (locked ? ' disabled' : '') + ' aria-pressed="' + (sel.indexOf(L) >= 0) + '"><b class="lat">' + L + '</b></button>';
   }).join('') + '</div>';
 }
@@ -611,8 +614,10 @@ function qscreen(ctx) {
   const locked = !!r || (live && (examLeft() <= 0 || (prog.exam.lock && prog.exam.lock[key])));
   ctx.locked = locked;
   const chips = keys.map((k, j) => { const st = ctx.chip(k, j); const dis = ctx.chipDisabled && ctx.chipDisabled(j); return dis ? '<span class="qc dis' + (j === i ? ' cur' : '') + '"><span class="lat">' + (j + 1) + '</span></span>' : '<a class="qc' + (j === i ? ' cur' : '') + (st ? ' ' + st : '') + '" href="' + ctx.href(j) + '" aria-label="سؤال ' + (j + 1) + '"><span class="lat">' + (ctx.num ? ctx.num(k, j) : j + 1) + '</span></a>'; }).join('');
-  const verdict = r ? '<div class="verdict ' + (r.ok ? 'ok' : 'ko') + '" role="status"><b>' + (r.ok ? '✓ إجابة صحيحة' : r.s ? '✗ إجابة غير صحيحة' : '— لم تُجب عن هذا السؤال') + '</b><span>' + (r.s ? 'إجابتك: <b class="lat">' + esc(r.s) + '</b> · ' : '') + 'الصحيح: <b class="lat">' + esc(q.ans) + '</b></span></div>' : '';
-  const years = q.years && q.years.length ? '<span class="yrs">ظهر في: <b class="lat">' + q.years.join(' · ') + '</b>' + (q.years.length > 1 ? ' <em class="lat">×' + q.years.length + '</em>' : '') + '</span>' : (it.set.key === 'proposed' ? '<span class="yrs">سؤال مقترح</span>' : '');
+  const open = !q.ans;
+  const lessonLink = q.p ? '<a href="#/c/' + it.ch.id + '/p/' + q.p + '">افتح الدرس ←</a>' : '<a href="#/c/' + it.ch.id + '">افتح الدروس ←</a>';
+  const verdict = r && open ? '<div class="verdict open" role="status"><b>📖 هذا السؤال بلا تصحيح في الملف</b><span>إجابتك: <b class="lat">' + esc(r.s) + '</b> · اعتمد على الدرس في حلك. ' + lessonLink + '</span></div>' : r ? '<div class="verdict ' + (r.ok ? 'ok' : 'ko') + '" role="status"><b>' + (r.ok ? '✓ إجابة صحيحة' : r.s ? '✗ إجابة غير صحيحة' : '— لم تُجب عن هذا السؤال') + '</b><span>' + (r.s ? 'إجابتك: <b class="lat">' + esc(r.s) + '</b> · ' : '') + 'الصحيح: <b class="lat">' + esc(q.ans) + '</b></span></div>' : '';
+  const years = (open ? '<span class="yrs nokey">بدون تصحيح · اعتمد على الدرس</span>' : '') + (q.years && q.years.length ? '<span class="yrs">ظهر في: <b class="lat">' + q.years.join(' · ') + '</b>' + (q.years.length > 1 ? ' <em class="lat">×' + q.years.length + '</em>' : '') + '</span>' : (it.set.key === 'proposed' ? '<span class="yrs">سؤال مقترح</span>' : ''));
   const src = mode === 'practice' ? '' : '<a class="srcq" href="#/c/' + it.ch.id + '/q/' + it.set.key + '/' + (it.i + 1) + '" style="--c:var(--c' + it.ch.id + ')"><b class="lat">CH ' + cn(it.ch) + '</b> ' + KIND_AR[it.set.key] + ' · س<span class="lat">' + q.n + '</span></a>';
   const flagged = live && prog.exam.flag && prog.exam.flag[key];
   let action = '';
@@ -627,7 +632,7 @@ function qscreen(ctx) {
     '<article class="qcard"><i class="wm tw"></i><div class="qtop"><span class="qn">السؤال <b class="lat">' + (i + 1) + '</b> من <b class="lat">' + keys.length + '</b></span>' + src + years + (ctx.qtimer || '') + star(key) + '</div>' +
     '<div id="qbody">' + (textMode ? loading : fig(q.q, 'qimg zoomable', '9 / 4') + '<p class="zhint">اضغط على السؤال لتكبيره</p>') + '</div>' +
     '<div class="opick"><p>' + (r ? 'إجابتك:' : live ? 'اختر الإجابة أو الإجابات (تُحفظ تلقائياً، والتصحيح بعد التسليم):' : 'اختر الإجابة أو الإجابات الصحيحة (قد تكون أكثر من واحدة):') + '</p>' + (textMode ? '' : letterRow(q, sel, r, locked)) + action + '</div>' +
-    verdict + (r ? '<div class="sol"><p class="solh">الحل والشرح</p><div id="sbody">' + (textMode ? loading : fig(q.s, 'simg zoomable', '9 / 3')) + '</div></div>' : '') +
+    verdict + (r && !open ? '<div class="sol"><p class="solh">الحل والشرح</p><div id="sbody">' + (textMode ? loading : fig(q.s, 'simg zoomable', '9 / 3')) + '</div></div>' : '') +
     '<div class="qnav">' + prevB + mid + nextB + '</div></article>' +
     '<p class="kbd lat">A–F · Enter · ← →</p></div>';
   hydrate();
@@ -937,7 +942,7 @@ function onTick() {
 }
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 function poolFor(src, chs) {
-  return Object.keys(ITEMS).filter((k) => chs.indexOf(ITEMS[k].ch.id) >= 0 && (src === 'all' || ITEMS[k].set.key === src));
+  return Object.keys(ITEMS).filter((k) => chs.indexOf(ITEMS[k].ch.id) >= 0 && !isOpen(k) && (src === 'all' || ITEMS[k].set.key === src));
 }
 function buildExam(n, src, chs, weighted) {
   const pool = poolFor(src, chs);
@@ -1126,7 +1131,7 @@ function check() {
   const key = c.keys[c.i], s = norm((quizSel[key] || []).join(''));
   if (!s) return;
   const ok = setRes(key, s, c.mode === 'review' && c.src === 'today');
-  if (c.mode === 'review') revRes[key] = { s: s, ok: ok };
+  if (c.mode === 'review') revRes[key] = { s: s, ok: !!ok, open: ok === null };
   delete quizSel[key]; save();
   const y = window.scrollY; router(); window.scrollTo(0, y);
   setTimeout(() => { const v = $('.verdict'); if (v && v.scrollIntoView) v.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 60);

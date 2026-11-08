@@ -2,9 +2,9 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
-} from './firebase.js?v=25';
-import { fmt, typeset } from './rich.js?v=25';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=25';
+} from './firebase.js?v=27';
+import { fmt, typeset } from './rich.js?v=27';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=27';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -205,7 +205,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 25;
+const APP_V = 27;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -449,11 +449,7 @@ function watermark() {
 }
 // فيديوهات Google Drive المرتبطة بصفحة الدرس (المشاركة مقيّدة بالطلبة المقبولين في Drive نفسه)
 const DRV = /^[A-Za-z0-9_-]{20,80}$/, YTV = /^[A-Za-z0-9_-]{11}$/;
-function ytBox(v) {   // مشغّل يوتيوب الرسمي: الفيديو يبقى على قناة صاحبه
-  const st = (v.s ? '&start=' + (v.s | 0) : '') + (v.e ? '&end=' + (v.e | 0) : '') + '&enablejsapi=1&origin=' + encodeURIComponent(location.origin);
-  return '<div class="vid yt clean"><div class="vfr"><iframe data-vid="' + v.yt + '" data-ys="' + (v.s | 0) + '" data-ye="' + (v.e | 0) + '" data-yo="' + (v.eo | 0) + '" src="https://www.youtube-nocookie.com/embed/' + v.yt + YTP + st + '" title="' + esc(v.t || 'فيديو الدرس') + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>' + SHIELD + '</div>' +
-    '<div class="plbar"><span class="pltit">' + esc(v.t || 'فيديو الدرس') + '</span><button type="button" class="vbtn" data-vfs title="ملء الشاشة">⛶</button></div></div>';
-}
+function ytBox(v) { return ytList([v]); }   // مشغّل يوتيوب الرسمي: الفيديو يبقى على قناة صاحبه
 function vidBox(ch, p) {
   const L = ((M && M.vid) || {})[p.n] || [];
   const ok = L.filter((v) => v && (DRV.test(v.id || '') || YTV.test(v.yt || '')));
@@ -490,30 +486,77 @@ const YTP = '?rel=0&modestbranding=1&fs=0&iv_load_policy=3&playsinline=1';
 const SHIELD = '<i class="ysh top" aria-hidden="true"></i><i class="ysh logo" aria-hidden="true"></i>';
 const ytSrc = (v, auto) => 'https://www.youtube-nocookie.com/embed/' + v.yt + YTP + '&enablejsapi=1&origin=' + encodeURIComponent(location.origin) + (v.s ? '&start=' + (v.s | 0) : '') + (v.e ? '&end=' + (v.e | 0) : '') + (auto ? '&autoplay=1' : '');
 let PLN = 0; const PL = {};
+function toast(msg) {
+  let t = document.getElementById('gctoast');
+  if (!t) { t = document.createElement('div'); t.id = 'gctoast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('on'), 3200);
+}
+const RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+const ytFrame = (v, auto) => '<iframe data-pl="1" data-vid="' + v.yt + '" data-ys="' + (v.s | 0) + '" data-ye="' + (v.e | 0) + '" data-yo="' + (v.eo | 0) + '" src="' + ytSrc(v, auto) + '" title="' + esc(v.t || 'فيديو الدرس') + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>' + SHIELD;
+// واجهة خفيفة: صورة الفيديو فقط، ومشغّل يوتيوب (الثقيل) لا يُحمَّل إلا عند الضغط على «تشغيل»
+const ytFacade = (v, i, n) => '<button type="button" class="yfac" data-yplay style="background-image:url(https://i.ytimg.com/vi/' + v.yt + '/hqdefault.jpg)" aria-label="تشغيل ' + esc(v.t || 'الفيديو') + '"><span class="yshade"></span><span class="yft"><small class="lat" dir="ltr">' + (n > 1 ? 'PART ' + (i + 1) + ' / ' + n : 'VIDEO') + '</small>' + esc(v.t || 'فيديو الدرس') + '</span><span class="yplay"><svg viewBox="0 0 68 48" aria-hidden="true"><path d="M66.5 7.7a8.5 8.5 0 0 0-6-6C55.2.3 34 .3 34 .3s-21.2 0-26.5 1.4a8.5 8.5 0 0 0-6 6C.1 13 .1 24 .1 24s0 11 1.4 16.3a8.5 8.5 0 0 0 6 6C12.8 47.7 34 47.7 34 47.7s21.2 0 26.5-1.4a8.5 8.5 0 0 0 6-6C67.9 35 67.9 24 67.9 24s0-11-1.4-16.3z" fill="currentColor"/><path d="M45 24 27 14v20z" fill="#fff"/></svg></span></button>';
 function ytList(vs, opts) {
   const id = 'pl' + (++PLN); PL[id] = vs;
-  const v = vs[0];
-  return '<div class="vid yt pl clean" id="' + id + '" data-i="0"><div class="vfr"><iframe data-pl="1" data-vid="' + v.yt + '" data-ys="' + (v.s | 0) + '" data-ye="' + (v.e | 0) + '" data-yo="' + (v.eo | 0) + '" src="' + ytSrc(v) + '" title="' + esc(v.t || 'فيديو الدرس') + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>' + SHIELD + '</div>' +
-    '<div class="plbar">' + (vs.length > 1 ? '<button type="button" class="vbtn" data-plstep="' + id + ':1" title="الجزء التالي">›</button><button type="button" class="vbtn" data-plstep="' + id + ':-1" title="الجزء السابق">‹</button>' : '') +
-    '<span class="pltit"><b class="lat plnum">1/' + vs.length + '</b> <span class="plname">' + esc(v.t || 'الجزء 1') + '</span></span>' +
-    (vs.length > 1 ? '<button type="button" class="vbtn wide" data-pllist="' + id + '">≡ الأجزاء</button>' : '') + '<button type="button" class="vbtn" data-vfs title="ملء الشاشة">⛶</button>' + (opts && opts.mini ? '<button type="button" class="vbtn" data-vmini title="تصغير">⤡</button>' : '') + '</div>' +
-    '<ol class="plist">' + vs.map((x, i) => '<li><button type="button" class="plit' + (i ? '' : ' on') + '" data-plgo="' + id + ':' + i + '"><b class="lat">' + (i + 1) + '</b><span>' + esc(x.t || 'الجزء ' + (i + 1)) + '</span></button></li>').join('') + '</ol></div>';
+  const v = vs[0], n = vs.length;
+  return '<div class="vid yt pl clean" id="' + id + '" data-i="0" data-rate="1"><div class="vfr">' + ytFacade(v, 0, n) + '</div>' +
+    '<div class="plbar">' + (n > 1 ? '<button type="button" class="vbtn" data-plstep="' + id + ':-1" title="الجزء السابق" aria-label="الجزء السابق">' + IC.prev + '</button><button type="button" class="vbtn" data-plstep="' + id + ':1" title="الجزء التالي" aria-label="الجزء التالي">' + IC.next + '</button>' : '') +
+    '<span class="pltit">' + (n > 1 ? '<b class="lat plnum">1/' + n + '</b> ' : '') + '<span class="plname">' + esc(v.t || 'الجزء 1') + '</span></span>' +
+    '<span class="vtools">' +
+      '<span class="vrate" title="سرعة التشغيل"><span class="vrl">' + IC.speed + '</span><select data-vrate aria-label="سرعة التشغيل">' + RATES.map((r) => '<option value="' + r + '"' + (r === 1 ? ' selected' : '') + '>' + (r === 1 ? 'عادي' : r + '×') + '</option>').join('') + '</select></span>' +
+      '<button type="button" class="vbtn" data-vcc title="الترجمة (Sous-titres)" aria-pressed="false">CC</button>' +
+      (n > 1 ? '<button type="button" class="vbtn" data-pllist="' + id + '" title="قائمة الأجزاء" aria-label="قائمة الأجزاء">' + IC.list + '</button>' : '') +
+      '<button type="button" class="vbtn" data-vfs title="ملء الشاشة" aria-label="ملء الشاشة">' + IC.fs + '</button>' +
+      (opts && opts.mini ? '<button type="button" class="vbtn" data-vmini title="تصغير" aria-label="تصغير">' + IC.mini + '</button>' : '') +
+    '</span></div>' +
+    (n > 1 ? '<ol class="plist">' + vs.map((x, i) => '<li><button type="button" class="plit' + (i ? '' : ' on') + '" data-plgo="' + id + ':' + i + '"><img src="https://i.ytimg.com/vi/' + x.yt + '/mqdefault.jpg" alt="" loading="lazy"><b class="lat">' + (i + 1) + '</b><span>' + esc(x.t || 'الجزء ' + (i + 1)) + '</span></button></li>').join('') + '</ol>' : '') + '</div>';
+}
+const IC = {
+  prev: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6v12M18 6l-8 6 8 6z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+  next: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 6v12M6 6l8 6-8 6z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+  list: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h11M4 12h11M4 18h7M18 15l4 3-4 3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  fs: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  mini: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="11" y="11" width="8" height="5" rx="1" fill="currentColor"/></svg>',
+  speed: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18a8 8 0 1 1 16 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 18l4-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
+};
+function ytActivate(box, auto) {   // يحمّل مشغّل يوتيوب مكان الصورة
+  const v = PL[box.id][+box.dataset.i]; box.dataset.on = '1';
+  box.querySelector('.vfr').innerHTML = ytFrame(v, auto);
 }
 function plGo(id, i, auto) {
   const box = document.getElementById(id), vs = PL[id]; if (!box || !vs || i < 0 || i >= vs.length) return;
-  const v = vs[i], fr = box.querySelector('iframe');
-  box.dataset.i = i; fr.dataset.vid = v.yt; fr.dataset.ys = v.s | 0; fr.dataset.ye = v.e | 0; fr.dataset.yo = v.eo | 0; fr.dataset.dur = ''; fr.dataset.adv = '';
-  fr.title = v.t || 'فيديو الدرس'; fr.src = ytSrc(v, auto);
+  const v = vs[i]; box.dataset.i = i;
+  if (!box.dataset.on) { if (auto) ytActivate(box, true); else box.querySelector('.vfr').innerHTML = ytFacade(v, i, vs.length); }
+  else {
+    const fr = box.querySelector('iframe');
+    fr.dataset.st = ''; fr.dataset.cmd = ''; fr.dataset.rated = ''; fr.dataset.vid = v.yt; fr.dataset.ys = v.s | 0; fr.dataset.ye = v.e | 0; fr.dataset.yo = v.eo | 0; fr.dataset.dur = ''; fr.dataset.adv = '';
+    fr.title = v.t || 'فيديو الدرس'; fr.src = ytSrc(v, auto);
+  }
   box.querySelectorAll('.plit').forEach((b, k) => b.classList.toggle('on', k === i));
-  box.querySelector('.plnum').textContent = (i + 1) + '/' + vs.length; box.querySelector('.plname').textContent = v.t || 'الجزء ' + (i + 1);
-  box.querySelector('.plist').classList.remove('open');
+  const nb = box.querySelector('.plnum'); if (nb) nb.textContent = (i + 1) + '/' + vs.length;
+  box.querySelector('.plname').textContent = v.t || 'الجزء ' + (i + 1);
+  const pl = box.querySelector('.plist'); if (pl) pl.classList.remove('open');
 }
+function ytApplyPrefs(box, fr) {   // السرعة والترجمة تبقيان عند الانتقال بين الأجزاء
+  const r = +box.dataset.rate || 1; if (r !== 1) ytCmd(fr, 'setPlaybackRate', [r]);
+  if (box.dataset.cc === '1') { ytCmd(fr, 'loadModule', ['captions']); ytCmd(fr, 'setOption', ['captions', 'reload', true]); }
+}
+document.addEventListener('change', (e) => {
+  const sel = e.target.closest && e.target.closest('[data-vrate]'); if (!sel) return;
+  const box = sel.closest('.vid'); box.dataset.rate = sel.value;
+  const fr = box.querySelector('iframe'); if (fr) ytCmd(fr, 'setPlaybackRate', [+sel.value]);
+});
 document.addEventListener('click', (e) => {
-  const c = e.target.closest && e.target.closest('[data-plstep],[data-pllist],[data-vfs]');
+  const c = e.target.closest && e.target.closest('[data-yplay],[data-plstep],[data-pllist],[data-vfs],[data-vcc]');
   if (c) {
     const box = c.closest('.vid');
-    if (c.dataset.plstep) { const [id, d] = c.dataset.plstep.split(':'); plGo(id, +box.dataset.i + +d, true); }
+    if (c.dataset.yplay !== undefined) ytActivate(box, true);
+    else if (c.dataset.plstep) { const [id, d] = c.dataset.plstep.split(':'); plGo(id, +box.dataset.i + +d, true); }
     else if (c.dataset.pllist) box.querySelector('.plist').classList.toggle('open');
+    else if (c.dataset.vcc !== undefined) {
+      const on = box.dataset.cc !== '1'; box.dataset.cc = on ? '1' : ''; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on);
+      const fr = box.querySelector('iframe'); if (fr) { if (on) { ytCmd(fr, 'loadModule', ['captions']); ytCmd(fr, 'setOption', ['captions', 'reload', true]); } else ytCmd(fr, 'unloadModule', ['captions']); }
+      toast(on ? 'الترجمة مفعّلة (إن كانت متوفرة لهذا الفيديو) — اللغة من ⚙ داخل المشغّل' : 'الترجمة متوقفة');
+    }
     else { const f = box.querySelector('.vfr'); if (document.fullscreenElement) document.exitFullscreen(); else { const rq = f.requestFullscreen || f.webkitRequestFullscreen; if (rq) rq.call(f); } }
     return;
   }
@@ -531,18 +574,24 @@ window.addEventListener('message', (e) => {
   const fr = Array.from(document.querySelectorAll('.vid.yt iframe[data-ys]')).find((f) => f.contentWindow === e.source);
   if (!fr || !d) return;
   const box = fr.dataset.pl ? fr.closest('.pl') : null;
-  const ended = (d.event === 'onStateChange' && d.info === 0) || (d.info && d.info.playerState === 0);
-  if (box && ended && !fr.dataset.adv) { fr.dataset.adv = '1'; plGo(box.id, +box.dataset.i + 1, true); return; }
+  // حالة المشغّل: 1 تشغيل، 2 إيقاف مؤقت، 3 تحميل، 0 انتهى، 5/‎-1 لم يبدأ — لا نتدخّل أبداً قبل أن يضغط الطالب «تشغيل»
+  if (d.event === 'onStateChange' && typeof d.info === 'number') fr.dataset.st = d.info;
+  if (d.info && typeof d.info.playerState === 'number') fr.dataset.st = d.info.playerState;
+  const st = +(fr.dataset.st || -1);
+  if (st === 1 && box && fr.dataset.rated !== '1') { fr.dataset.rated = '1'; ytApplyPrefs(box, fr); }
+  if (box && st === 0 && !fr.dataset.adv && +box.dataset.i + 1 < (PL[box.id] || []).length) { fr.dataset.adv = '1'; plGo(box.id, +box.dataset.i + 1, true); return; }
   const vd = d.info && d.info.videoData && d.info.videoData.video_id;
-  if (vd && fr.dataset.vid && vd !== fr.dataset.vid) {   // فتح الطالب فيديو آخر من اقتراحات يوتيوب: نعيد فيديو الدرس
-    const box2 = fr.closest('.pl'); if (box2) plGo(box2.id, +box2.dataset.i, false); else fr.src = fr.src; return;
+  if (vd && YTV.test(vd) && fr.dataset.vid && vd !== fr.dataset.vid && (st === 1 || st === 3)) {   // فتح الطالب فيديو آخر من اقتراحات يوتيوب: نعيد فيديو الدرس (مرة كل 10 ثوانٍ على الأكثر)
+    const nowT = Date.now(); if (nowT - (+fr.dataset.back || 0) < 10000) return; fr.dataset.back = nowT;
+    const box2 = fr.closest('.pl'); if (box2) plGo(box2.id, +box2.dataset.i, true); else ytCmd(fr, 'loadVideoById', [{ videoId: fr.dataset.vid, startSeconds: +fr.dataset.ys || 0 }]); return;
   }
   if (d.info && typeof d.info.duration === 'number' && d.info.duration > 0) fr.dataset.dur = d.info.duration;
-  if (!d.info || typeof d.info.currentTime !== 'number') return;
+  if (!d.info || typeof d.info.currentTime !== 'number' || !(st === 1 || st === 3)) return;
   const yo = +fr.dataset.yo || 0, dur = +fr.dataset.dur || 0;
   const s = +fr.dataset.ys || 0, en = +fr.dataset.ye || (yo && dur > yo ? dur - yo : 0), t = d.info.currentTime;
-  if (s && t < s - 1) ytCmd(fr, 'seekTo', [s, true]);
-  else if (en && t > en + (yo ? 0 : 1)) { if (box && !fr.dataset.adv) { fr.dataset.adv = '1'; plGo(box.id, +box.dataset.i + 1, true); } else { ytCmd(fr, 'seekTo', [en, true]); ytCmd(fr, 'pauseVideo'); } }
+  const nowT = Date.now(); if (nowT - (+fr.dataset.cmd || 0) < 1500) return;   // لا نرسل أوامر متلاحقة
+  if (s && t < s - 1) { fr.dataset.cmd = nowT; ytCmd(fr, 'seekTo', [s, true]); }
+  else if (en && t > en + (yo ? 0 : 1)) { fr.dataset.cmd = nowT; if (box && !fr.dataset.adv && +box.dataset.i + 1 < (PL[box.id] || []).length) { fr.dataset.adv = '1'; plGo(box.id, +box.dataset.i + 1, true); } else { ytCmd(fr, 'seekTo', [en, true]); ytCmd(fr, 'pauseVideo'); } }
 });
 function ytListen(root) {
   (root || document).querySelectorAll('.vid.yt iframe[data-ys]').forEach((fr) => {

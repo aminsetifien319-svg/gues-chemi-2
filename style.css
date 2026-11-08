@@ -912,3 +912,5 @@ html[data-theme="dark"] .yrs.nokey{background:#3a2c10;color:#f3cf86}
 #gctoast{position:fixed;z-index:90;bottom:20px;left:50%;transform:translate(-50%,30px);opacity:0;pointer-events:none;background:#0b1b33;color:#fff;padding:10px 16px;border-radius:12px;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.3);transition:.25s;max-width:calc(100vw - 32px);text-align:center}
 #gctoast.on{opacity:1;transform:translate(-50%,0)}
 @media (max-width:560px){.pltit{order:-1;flex-basis:100%}.vtools{margin-inline-start:0}}
+/* على الهاتف أزرار يوتيوب (⚙ الجودة، الترجمة، المزيد) في أعلى اليمين: الحاجز يغطي العنوان فقط */
+.vfr .ysh.top{left:0;right:clamp(110px,26%,170px);width:auto}

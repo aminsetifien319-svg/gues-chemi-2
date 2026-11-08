@@ -1,8 +1,8 @@
 // محرّر المحتوى (للمشرف فقط): تصحيح الدروس والأسئلة والبطاقات مباشرة من لوحة الإدارة.
 // كل حفظ يُنشئ نسخة جديدة من ملف النص (معرّف جديد) ثم يحدّث الفهرس، فيرى الطلبة التعديل فوراً،
 // وتبقى النسخة الأصلية محفوظة للرجوع إليها.
-import { getImage, uploadImage, loadManifest, uploadManifest, loadSubjects } from './firebase.js?v=17';
-import { fmt, typeset } from './rich.js?v=17';
+import { getImage, uploadImage, loadManifest, uploadManifest, loadSubjects } from './firebase.js?v=25';
+import { fmt, typeset } from './rich.js?v=25';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -138,11 +138,42 @@ async function open() {
     if (sel.type === 'lesson') lessonEditor(area); else questionEditor(area);
   } catch (e) { area.innerHTML = '<p class="err">تعذّر التحميل: ' + esc(e && e.message || e) + '</p>'; }
 }
+const DRV_ID = /(?:\/d\/|[?&]id=)([A-Za-z0-9_-]{20,80})/;
+const hms = (x) => String(x).split(':').reduce((a, b) => a * 60 + (+b || 0), 0);
+const mmss = (x) => { x = x | 0; const h = Math.floor(x / 3600), m = Math.floor(x / 60) % 60, s = x % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); };
+function vidText(n) { return (((M && M.vid) || {})[n] || []).map((v) => (v.yt ? 'https://youtu.be/' + v.yt + (v.eo ? ' [' + mmss(v.s || 0) + ' / ' + mmss(v.eo) + ']' : v.s || v.e ? ' [' + mmss(v.s || 0) + (v.e ? '-' + mmss(v.e) : '') + ']' : '') : 'https://drive.google.com/file/d/' + v.id + '/view') + (v.t ? ' ' + v.t : '')).join('\n'); }
+const YT_ID = /(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:[^ ]*&)?v=|embed\/|shorts\/|live\/|v\/))([A-Za-z0-9_-]{11})/;
+function ytStart(l) { const m = l.match(/[?&](?:t|start)=([0-9hms]+)/); if (!m) return 0; const v = m[1]; if (/^\d+$/.test(v)) return +v; const g = (u) => { const x = v.match(new RegExp('(\\d+)' + u)); return x ? +x[1] : 0; }; return g('h') * 3600 + g('m') * 60 + g('s'); }
+function parseVids(txt) {
+  const out = [];
+  for (const line of String(txt || '').split('\n')) {
+    const l = line.trim(); if (!l) continue;
+    const y = l.match(YT_ID);
+    if (y) {
+      let rest = l.replace(/^\S+\s*/, ''), s = ytStart(l.split(/\s/)[0]), e = 0;
+      let eo = 0;
+      const r2 = rest.match(/\[\s*(\d{1,2}(?::\d{1,2}){0,2})\s*\/\s*(\d{1,2}(?::\d{1,2}){0,2})\s*\]/);   // [0:42 / 0:30] = مقدمة 42ث وخاتمة 30ث
+      const r = r2 ? null : rest.match(/\[\s*(\d{1,2}(?::\d{1,2}){0,2})\s*(?:[-–]\s*(\d{1,2}(?::\d{1,2}){0,2}))?\s*\]/);   // [1:30] أو [1:30-25:10]
+      if (r2) { s = hms(r2[1]); eo = hms(r2[2]); rest = rest.replace(r2[0], '').trim(); }
+      if (r) { s = hms(r[1]); if (r[2]) e = hms(r[2]); rest = rest.replace(r[0], '').trim(); }
+      if (e && e <= s) throw new Error('نهاية المقطع يجب أن تكون بعد بدايته: ' + r[0]);
+      const t = rest.slice(0, 80), o = { yt: y[1] }; if (t) o.t = t; if (s) o.s = s; if (e) o.e = e; if (eo) o.eo = eo; out.push(o); continue;
+    }
+    const m = l.match(DRV_ID) || l.match(/^([A-Za-z0-9_-]{25,80})(?:\s|$)/);
+    if (!m) throw new Error('رابط فيديو غير صحيح: ' + l.slice(0, 60) + ' — الصق رابط يوتيوب أو رابط مشاركة Google Drive.');
+    const t = l.replace(/^\S+\s*/, '').slice(0, 80);
+    out.push(t ? { id: m[1], t: t } : { id: m[1] });
+  }
+  return out;
+}
+function cvidText(id) { const keep = M.vid; M.vid = { _: (M.cvid || {})[id] || [] }; const t = vidText('_'); M.vid = keep; return t; }
 function lessonEditor(area) {
   const P = T.pages[sel.item];
   if (!P) { area.innerHTML = '<p class="err">هذه الصفحة غير موجودة في النص (تُعرض كصورة فقط).</p>'; return; }
   CUR = { kind: 'lesson', n: sel.item };
   area.innerHTML = '<label class="edlbl">العنوان بالعربية</label><input class="input" id="l_ar" dir="rtl" value="' + esc(P.ar || '') + '">' +
+    '<label class="edlbl">فيديو لهذه الصفحة: يوتيوب أو Google Drive <small>(رابط في كل سطر · بعده مسافة ثم عنوان · لتخطي المقدمة: [0:42] · المقدمة والخاتمة: [0:42 / 0:30] أي 42ث في البداية و30ث في النهاية · أو مقطع محدد [0:42-25:10])</small></label><textarea class="input" id="l_vid" dir="ltr" rows="2" placeholder="https://youtu.be/…  أو  https://drive.google.com/file/d/…/view   عنوان الفيديو">' + esc(vidText(sel.item)) + '</textarea>' +
+    '<label class="edlbl">🎬 فيديوهات ثابتة لكل صفحات هذا الشابيطر <small>(قائمة تشغيل واحدة في أعلى كل صفحات الشابيطر، لا تتوقف عند الانتقال بين الصفحات · نفس طريقة الكتابة)</small></label><textarea class="input" id="l_cvid" dir="ltr" rows="3" placeholder="https://youtu.be/…  [0:22 / 0:13]  عنوان الجزء">' + esc(cvidText(CH.id)) + '</textarea>' +
     '<label class="edlbl">محتوى الدرس (اضغط على أي نص لتعديله · الصور ثابتة)</label>' + toolbar() +
     '<div class="edlesson"><article class="lesson edbox" id="l_html" contenteditable="true" spellcheck="false" style="--c:var(--c' + CH.id + ')">' + P.html + '</article></div>' + saveRow();
   lockFigures($('#l_html'));
@@ -221,6 +252,8 @@ async function save() {
       if (CUR.kind === 'lesson') {
         const P = T.pages[CUR.n];
         P.html = clean($('#l_html')); P.ar = ($('#l_ar').value || '').trim();
+        CUR.vids = parseVids($('#l_vid').value);
+        CUR.cvids = parseVids($('#l_cvid').value);
       } else {
         const Q = T.q[CUR.key];
         const ans = $$('[data-ans]').filter((x) => x.checked).map((x) => x.dataset.ans).join('');
@@ -242,6 +275,10 @@ async function save() {
         cur.fix = cur.fix || {}; cur.fix.ans = cur.fix.ans || {}; cur.fix.ans[CUR.key] = ansFix;
         c.qcm.forEach((s) => s.q.forEach((q) => { if ('c' + c.id + s.key[0] + q.n === CUR.key) q.ans = ansFix; }));
         CUR.q.ans = ansFix;
+      }
+      if (CUR.kind === 'lesson') {
+        cur.vid = cur.vid || {}; if (CUR.vids.length) cur.vid[CUR.n] = CUR.vids; else delete cur.vid[CUR.n];
+        cur.cvid = cur.cvid || {}; if (CUR.cvids.length) cur.cvid[c.id] = CUR.cvids; else delete cur.cvid[c.id];
       }
       await uploadManifest(cur, docOf(sel.sub)); M = cur; MSS[sel.sub] = cur; CH = c;
     }

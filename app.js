@@ -2,9 +2,9 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
-} from './firebase.js?v=17';
-import { fmt, typeset } from './rich.js?v=17';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=17';
+} from './firebase.js?v=25';
+import { fmt, typeset } from './rich.js?v=25';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=25';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -205,7 +205,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 17;
+const APP_V = 25;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -384,6 +384,7 @@ function router() {
   if (r.v === 'page' || r.v === 'quiz' || r.v === 'chapter') { prog.last = location.hash; prog.lastT = now(); save(); }
   side(r);
   closeSide();
+  dock(r);
 }
 window.addEventListener('hashchange', () => { if (parse().v === 'search' && $('#sq')) return; router(); window.scrollTo(0, 0); });
 const go = (h) => { if (location.hash === h) router(); else location.hash = h; };
@@ -446,6 +447,111 @@ function watermark() {
   wmUrl = 'url("data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) + '")';
   return wmUrl;
 }
+// فيديوهات Google Drive المرتبطة بصفحة الدرس (المشاركة مقيّدة بالطلبة المقبولين في Drive نفسه)
+const DRV = /^[A-Za-z0-9_-]{20,80}$/, YTV = /^[A-Za-z0-9_-]{11}$/;
+function ytBox(v) {   // مشغّل يوتيوب الرسمي: الفيديو يبقى على قناة صاحبه
+  const st = (v.s ? '&start=' + (v.s | 0) : '') + (v.e ? '&end=' + (v.e | 0) : '') + '&enablejsapi=1&origin=' + encodeURIComponent(location.origin);
+  return '<div class="vid yt clean"><div class="vfr"><iframe data-vid="' + v.yt + '" data-ys="' + (v.s | 0) + '" data-ye="' + (v.e | 0) + '" data-yo="' + (v.eo | 0) + '" src="https://www.youtube-nocookie.com/embed/' + v.yt + YTP + st + '" title="' + esc(v.t || 'فيديو الدرس') + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>' + SHIELD + '</div>' +
+    '<div class="plbar"><span class="pltit">' + esc(v.t || 'فيديو الدرس') + '</span><button type="button" class="vbtn" data-vfs title="ملء الشاشة">⛶</button></div></div>';
+}
+function vidBox(ch, p) {
+  const L = ((M && M.vid) || {})[p.n] || [];
+  const ok = L.filter((v) => v && (DRV.test(v.id || '') || YTV.test(v.yt || '')));
+  if (!ok.length) return '';
+  const yts = ok.filter((v) => v.yt), drv = ok.filter((v) => !v.yt);
+  return '<section class="vids">' + (yts.length > 1 ? ytList(yts) : yts.map(ytBox).join('')) + drv.map((v) => '<div class="vid"><div class="vfr"><iframe src="https://drive.google.com/file/d/' + v.id + '/preview" title="' + esc(v.t || 'فيديو الدرس') + '" allow="autoplay; fullscreen" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>' +
+    '<p class="vbar"><span>🎬 ' + esc(v.t || 'فيديو الدرس') + '</span><a href="https://drive.google.com/file/d/' + v.id + '/view" target="_blank" rel="noopener">افتح في Google Drive ↗</a></p>' +
+    '<p class="vhint">إن لم يظهر الفيديو: افتح الموقع في Chrome بنفس حساب Gmail المقبول، أو اضغط «افتح في Google Drive».</p></div>').join('') + '</section>';
+}
+// عدة فيديوهات يوتيوب لنفس الصفحة: مشغّل واحد + قائمة أجزاء، وينتقل للجزء التالي تلقائياً
+// مشغّل ثابت لكل صفحات الشابيطر: لا يُعاد تحميله عند الانتقال بين صفحات نفس الشابيطر (يبقى خارج #view)
+let DOCK = null, DOCKK = '';
+function dockMini(on) { try { if (on === undefined) return localStorage.getItem('gc.vmini') === '1'; localStorage.setItem('gc.vmini', on ? '1' : '0'); } catch (e) {} return false; }
+function dock(r) {
+  const ch = (r.v === 'page' || r.v === 'chapter') ? r.ch : null;
+  const L = ch && M && M.cvid ? (M.cvid[ch.id] || []).filter((v) => v && (YTV.test(v.yt || '') || DRV.test(v.id || ''))) : [];
+  if (!DOCK || !DOCK.isConnected) { DOCKK = ''; DOCK = document.createElement('div'); DOCK.id = 'vdock'; DOCK.hidden = true; VIEW.parentNode.insertBefore(DOCK, VIEW); }
+  if (!L.length) { if (DOCKK) { DOCK.innerHTML = ''; DOCKK = ''; } DOCK.hidden = true; return; }
+  const k = CURS + ':' + ch.id + ':' + JSON.stringify(L);
+  if (k !== DOCKK) {   // شابيطر جديد أو قائمة تغيّرت فقط
+    DOCKK = k;
+    const yts = L.filter((v) => v.yt), drv = L.filter((v) => !v.yt);
+    DOCK.className = 'wrap reader vdock' + (dockMini() ? ' mini' : '');
+    DOCK.style.setProperty('--c', 'var(--c' + ch.id + ')');
+    DOCK.innerHTML = (yts.length ? ytList(yts, { mini: 1 }) : '') + drv.map((v) => '<div class="vid"><div class="vfr"><iframe src="https://drive.google.com/file/d/' + v.id + '/preview" title="' + esc(v.t || 'فيديو') + '" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe></div><p class="vbar"><span>🎬 ' + esc(v.t || 'فيديو') + '</span><a href="https://drive.google.com/file/d/' + v.id + '/view" target="_blank" rel="noopener">افتح في Google Drive ↗</a></p></div>').join('');
+  }
+  DOCK.hidden = false;
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('[data-vmini]'); if (!b || !DOCK) return;
+  const on = !DOCK.classList.contains('mini'); DOCK.classList.toggle('mini', on); dockMini(on); b.textContent = on ? '⤢' : '⤡'; b.title = on ? 'تكبير' : 'تصغير';
+});
+const YTP = '?rel=0&modestbranding=1&fs=0&iv_load_policy=3&playsinline=1';
+const SHIELD = '<i class="ysh top" aria-hidden="true"></i><i class="ysh logo" aria-hidden="true"></i>';
+const ytSrc = (v, auto) => 'https://www.youtube-nocookie.com/embed/' + v.yt + YTP + '&enablejsapi=1&origin=' + encodeURIComponent(location.origin) + (v.s ? '&start=' + (v.s | 0) : '') + (v.e ? '&end=' + (v.e | 0) : '') + (auto ? '&autoplay=1' : '');
+let PLN = 0; const PL = {};
+function ytList(vs, opts) {
+  const id = 'pl' + (++PLN); PL[id] = vs;
+  const v = vs[0];
+  return '<div class="vid yt pl clean" id="' + id + '" data-i="0"><div class="vfr"><iframe data-pl="1" data-vid="' + v.yt + '" data-ys="' + (v.s | 0) + '" data-ye="' + (v.e | 0) + '" data-yo="' + (v.eo | 0) + '" src="' + ytSrc(v) + '" title="' + esc(v.t || 'فيديو الدرس') + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>' + SHIELD + '</div>' +
+    '<div class="plbar">' + (vs.length > 1 ? '<button type="button" class="vbtn" data-plstep="' + id + ':1" title="الجزء التالي">›</button><button type="button" class="vbtn" data-plstep="' + id + ':-1" title="الجزء السابق">‹</button>' : '') +
+    '<span class="pltit"><b class="lat plnum">1/' + vs.length + '</b> <span class="plname">' + esc(v.t || 'الجزء 1') + '</span></span>' +
+    (vs.length > 1 ? '<button type="button" class="vbtn wide" data-pllist="' + id + '">≡ الأجزاء</button>' : '') + '<button type="button" class="vbtn" data-vfs title="ملء الشاشة">⛶</button>' + (opts && opts.mini ? '<button type="button" class="vbtn" data-vmini title="تصغير">⤡</button>' : '') + '</div>' +
+    '<ol class="plist">' + vs.map((x, i) => '<li><button type="button" class="plit' + (i ? '' : ' on') + '" data-plgo="' + id + ':' + i + '"><b class="lat">' + (i + 1) + '</b><span>' + esc(x.t || 'الجزء ' + (i + 1)) + '</span></button></li>').join('') + '</ol></div>';
+}
+function plGo(id, i, auto) {
+  const box = document.getElementById(id), vs = PL[id]; if (!box || !vs || i < 0 || i >= vs.length) return;
+  const v = vs[i], fr = box.querySelector('iframe');
+  box.dataset.i = i; fr.dataset.vid = v.yt; fr.dataset.ys = v.s | 0; fr.dataset.ye = v.e | 0; fr.dataset.yo = v.eo | 0; fr.dataset.dur = ''; fr.dataset.adv = '';
+  fr.title = v.t || 'فيديو الدرس'; fr.src = ytSrc(v, auto);
+  box.querySelectorAll('.plit').forEach((b, k) => b.classList.toggle('on', k === i));
+  box.querySelector('.plnum').textContent = (i + 1) + '/' + vs.length; box.querySelector('.plname').textContent = v.t || 'الجزء ' + (i + 1);
+  box.querySelector('.plist').classList.remove('open');
+}
+document.addEventListener('click', (e) => {
+  const c = e.target.closest && e.target.closest('[data-plstep],[data-pllist],[data-vfs]');
+  if (c) {
+    const box = c.closest('.vid');
+    if (c.dataset.plstep) { const [id, d] = c.dataset.plstep.split(':'); plGo(id, +box.dataset.i + +d, true); }
+    else if (c.dataset.pllist) box.querySelector('.plist').classList.toggle('open');
+    else { const f = box.querySelector('.vfr'); if (document.fullscreenElement) document.exitFullscreen(); else { const rq = f.requestFullscreen || f.webkitRequestFullscreen; if (rq) rq.call(f); } }
+    return;
+  }
+  const b = e.target.closest && e.target.closest('[data-plgo]'); if (!b) return;
+  const [id, i] = b.dataset.plgo.split(':'); plGo(id, +i, true);
+});
+const cutLabel = (v) => v.eo ? ' <small class="vcut">✂ بدون المقدمة والخاتمة</small>' : v.s || v.e ? ' <small class="vcut">✂ مقطع <bdi dir="ltr">' + mmss(v.s || 0) + (v.e ? '–' + mmss(v.e) : '') + '</bdi></small>' : '';
+const mmss = (x) => { x = x | 0; const h = Math.floor(x / 3600), m = Math.floor(x / 60) % 60, s = x % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); };
+// قفل المقطع: إن رجع الطالب إلى ما قبل بداية المقطع (المقدمة) أو تجاوز نهايته، يعيده المشغّل تلقائياً — دون تحميل أي سكربت خارجي
+const YTO = 'https://www.youtube-nocookie.com';
+function ytCmd(fr, func, args) { try { fr.contentWindow.postMessage(JSON.stringify({ event: 'command', func: func, args: args || [] }), YTO); } catch (e) {} }
+window.addEventListener('message', (e) => {
+  if (e.origin !== YTO || typeof e.data !== 'string') return;
+  let d; try { d = JSON.parse(e.data); } catch (x) { return; }
+  const fr = Array.from(document.querySelectorAll('.vid.yt iframe[data-ys]')).find((f) => f.contentWindow === e.source);
+  if (!fr || !d) return;
+  const box = fr.dataset.pl ? fr.closest('.pl') : null;
+  const ended = (d.event === 'onStateChange' && d.info === 0) || (d.info && d.info.playerState === 0);
+  if (box && ended && !fr.dataset.adv) { fr.dataset.adv = '1'; plGo(box.id, +box.dataset.i + 1, true); return; }
+  const vd = d.info && d.info.videoData && d.info.videoData.video_id;
+  if (vd && fr.dataset.vid && vd !== fr.dataset.vid) {   // فتح الطالب فيديو آخر من اقتراحات يوتيوب: نعيد فيديو الدرس
+    const box2 = fr.closest('.pl'); if (box2) plGo(box2.id, +box2.dataset.i, false); else fr.src = fr.src; return;
+  }
+  if (d.info && typeof d.info.duration === 'number' && d.info.duration > 0) fr.dataset.dur = d.info.duration;
+  if (!d.info || typeof d.info.currentTime !== 'number') return;
+  const yo = +fr.dataset.yo || 0, dur = +fr.dataset.dur || 0;
+  const s = +fr.dataset.ys || 0, en = +fr.dataset.ye || (yo && dur > yo ? dur - yo : 0), t = d.info.currentTime;
+  if (s && t < s - 1) ytCmd(fr, 'seekTo', [s, true]);
+  else if (en && t > en + (yo ? 0 : 1)) { if (box && !fr.dataset.adv) { fr.dataset.adv = '1'; plGo(box.id, +box.dataset.i + 1, true); } else { ytCmd(fr, 'seekTo', [en, true]); ytCmd(fr, 'pauseVideo'); } }
+});
+function ytListen(root) {
+  (root || document).querySelectorAll('.vid.yt iframe[data-ys]').forEach((fr) => {
+    if (fr.dataset.ok) return; fr.dataset.ok = '1';
+    const hello = () => { try { fr.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'gc' }), YTO); } catch (e) {} };
+    fr.addEventListener('load', () => { hello(); setTimeout(hello, 1500); });
+  });
+}
+new MutationObserver(() => ytListen()).observe(document.documentElement, { childList: true, subtree: true });
 function origFigs(ch, p) { return [p.img].concat(p.imgs || []).map((im) => fig(im, 'zoomable page' + (ch.ratio ? ' tall' : ''), ch.ratio || '16 / 9')).join(''); }
 function fig(id, cls, ratio) {
   return '<figure class="pg ' + (cls || '') + '" data-img="' + esc(id) + '" style="aspect-ratio:' + (ratio || '16 / 9') + '"><span class="sk"></span><i class="wm"></i></figure>';
@@ -565,7 +671,7 @@ function page(ch, i) {
     '<div class="rmeta">' + star('p' + p.n, true) + '<span class="lat" dir="ltr">' + k + ' / ' + secPages.length + '</span><span class="sep"></span><span>صفحة <b class="lat">' + (i + 1) + '</b> من <b class="lat">' + list.length + '</b></span></div></header>' +
     '<div class="rbar"><i style="width:' + pct(i + 1, list.length) + '%;background:var(--c' + ch.id + ')"></i></div>' +
     '<div class="rtools">' + modeSwitch('p') + '</div>' +
-    '<div class="lbody" id="lbody">' + (viewMode === 'orig' || !ch.text ? origFigs(ch, p) + '<p class="hint"><button type="button" class="btn sm" data-zoom>⤢ تكبير وملء الشاشة</button><span>على الهاتف: أدِر الشاشة أفقياً أو استعمل زر التكبير.</span></p>' : loading) + '</div>' +
+    vidBox(ch, p) + '<div class="lbody" id="lbody">' + (viewMode === 'orig' || !ch.text ? origFigs(ch, p) + '<p class="hint"><button type="button" class="btn sm" data-zoom>⤢ تكبير وملء الشاشة</button><span>على الهاتف: أدِر الشاشة أفقياً أو استعمل زر التكبير.</span></p>' : loading) + '</div>' +
     '<div class="pnav">' + nav(prev, 'prev') + endNext + '</div></div>';
   hydrate();
   chText(ch).then((T) => {

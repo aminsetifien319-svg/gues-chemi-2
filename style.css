@@ -832,3 +832,57 @@ html[data-theme="dark"] .lesson .yr{background:#3a2c10;color:#f3cf86;border-colo
 html[data-theme="dark"] .verdict.open{background:#3a2c10;color:#f3cf86;border-color:#5a4520}
 .yrs.nokey{background:#fff3d6;color:#7a4b00;border-radius:999px;padding:1px 8px}
 html[data-theme="dark"] .yrs.nokey{background:#3a2c10;color:#f3cf86}
+
+/* ---- فيديو الدرس (Google Drive) ---- */
+.vids{margin:0 0 16px}
+.vid{background:var(--card);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden;margin-bottom:12px;border-top:4px solid var(--c,var(--sa))}
+.vfr{position:relative;aspect-ratio:16/9;background:#000}
+.vfr iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.vbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0;padding:10px 14px;font-weight:700}
+.vbar a{font-size:13px;color:var(--sa);font-weight:700}
+.vhint{margin:0;padding:0 14px 10px;font-size:12px;color:var(--mut)}
+.vbar .vcut{font-weight:600;font-size:12px;color:var(--mut);margin-inline-start:6px}
+.plist{list-style:none;margin:0;padding:0 10px 10px;display:flex;flex-direction:column;gap:4px;max-height:260px;overflow:auto}
+.plit{display:flex;align-items:center;gap:10px;width:100%;text-align:start;background:var(--soft);border:1px solid transparent;border-radius:10px;padding:8px 10px;cursor:pointer;font:inherit;color:inherit}
+.plit b{min-width:24px;height:24px;border-radius:999px;display:inline-grid;place-items:center;background:var(--line);font-size:12px}
+.plit span{flex:1}
+.plit:hover{border-color:var(--sa)}
+.plit.on{background:color-mix(in srgb,var(--sa) 14%,transparent);border-color:var(--sa);font-weight:700}
+.plit.on b{background:var(--sa);color:#fff}
+
+/* ---- مشغّل الشابيطر الثابت ---- */
+.vdock{margin-top:16px}
+.vdock .vdh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.vdock .vdh b{font-size:15px}
+.vdock .vdhint{font-size:12px;color:var(--mut);flex:1}
+.vdock .vid{margin-bottom:0}
+.vdock .plist{max-height:200px}
+.vdock.mini{position:fixed;z-index:60;inset-inline-start:auto;inset-inline-end:16px;bottom:16px;width:min(360px,calc(100vw - 32px));max-width:none;margin:0;padding:8px;background:var(--card);border-radius:16px;box-shadow:0 18px 50px rgba(10,26,51,.35)}
+.vdock.mini .vdhint,.vdock.mini .vbar a{display:none}
+.vdock.mini .plist{max-height:120px}
+.vdock.mini .vbar{padding:6px 8px;font-size:12px}
+@media (max-width:720px){.vdock.mini{inset-inline-end:8px;bottom:8px;width:calc(100vw - 16px)}}
+
+/* ---- مشغّل نظيف كما في صفحات الدروس العادية ---- */
+.vid.clean{background:transparent;box-shadow:none;border-top:0;border-radius:0;max-width:760px;margin:6px auto 16px;overflow:visible}
+.vid.clean .vfr{border-radius:12px;overflow:hidden;box-shadow:0 6px 22px rgba(10,26,51,.18)}
+.plbar{display:flex;align-items:center;gap:6px;padding:8px 2px 0;flex-wrap:wrap}
+.pltit{flex:1;min-width:120px;font-size:13.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pltit .plnum{color:var(--sa);margin-inline-end:4px}
+.vbtn{min-width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:var(--card);color:inherit;font:700 16px/1 var(--fl);cursor:pointer;padding:0 8px}
+.vbtn.wide{font-size:13px}
+.vbtn:hover{border-color:var(--sa);color:var(--sa)}
+.vid.clean .plist{display:none;margin-top:6px;padding:0}
+.vid.clean .plist.open{display:flex}
+.vdock{margin-top:10px;background:transparent}
+.vdock.mini{background:var(--card)}
+.vdock.mini .vid.clean{margin:0;max-width:none}
+.vdock.mini .vbtn.wide{display:none}
+.vdock.mini .pltit{font-size:12px}
+
+/* حواجز شفافة فوق عنوان يوتيوب وشعاره: لا ينتقل الطالب إلى يوتيوب (حيث المقدمة بالغناء) */
+.vfr .ysh{position:absolute;z-index:3;display:block;background:transparent;cursor:default}
+.vfr .ysh.top{top:0;left:0;right:0;height:clamp(44px,16%,72px)}
+.vfr .ysh.logo{bottom:0;right:0;width:clamp(80px,14%,120px);height:clamp(36px,11%,52px)}
+.vfr:fullscreen{width:100vw;height:100vh;aspect-ratio:auto;border-radius:0;background:#000}
+.vfr:-webkit-full-screen{width:100vw;height:100vh}

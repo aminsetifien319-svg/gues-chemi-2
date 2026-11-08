@@ -2,8 +2,8 @@
 import {
   watchUser, signIn, signOutUser, isAdminUser, listRequests, listAllowed,
   approve, reject, removeAllowed, addAllowed, authAgeHours, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, loadSubjects, saveSubjects, DEFAULT_SUBJECTS, configMissing
-} from './firebase.js?v=17';
-import { mountEditor } from './editor.js?v=17';
+} from './firebase.js?v=25';
+import { mountEditor } from './editor.js?v=25';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const box = $('#box');
@@ -94,6 +94,7 @@ async function refresh() {
     '<div class="card"><h2>طلبات الوصول <small>' + req.length + ' pending</small></h2>' +
     (req.length ? '<ul class="list" id="reqs">' + req.map((r) => li(r, 'req')).join('') + '</ul>' : '<p class="small">لا توجد طلبات الآن.</p>') + '</div>' +
     '<div class="card"><h2>الطلبة المقبولون <small>' + allowed.length + ' students</small></h2>' +
+    (allowed.length ? '<p class="row-form"><button type="button" class="btn" id="copymails" data-mails="' + esc(allowed.map((r) => r.email).join(', ')) + '">📋 نسخ إيميلات الطلبة المقبولين (لمشاركة فيديوهات Drive)</button></p>' : '') +
     '<div class="row-form"><input class="input" id="newmail" type="email" placeholder="student@gmail.com" autocomplete="off" dir="ltr"><button type="button" class="btn pri" id="add">إضافة بريد</button></div>' +
     (allowed.length ? '<ul class="list" id="alw">' + allowed.map((r) => li(r, 'alw')).join('') + '</ul>' : '<p class="small">لا يوجد طلبة مقبولون بعد.</p>') + '</div>' +
     progressCard(allowed, progress, devices) +
@@ -178,6 +179,8 @@ function keepEdits(nm, cur) {
     if (oc.textBase && oc.textBase === nc.text) { nc.text = oc.text; nc.textBase = oc.textBase; }
     if (oc.flash && !nc.flash) { nc.flash = oc.flash; if (oc.flashBase) nc.flashBase = oc.flashBase; }
   });
+  if (cur.vid) nm.vid = cur.vid;   // روابط الفيديو
+  if (cur.cvid) nm.cvid = cur.cvid;
   if (cur.fix) {
     nm.fix = cur.fix;
     const A = (cur.fix && cur.fix.ans) || {};
@@ -220,6 +223,11 @@ document.addEventListener('click', async (e) => {
   const t = e.target;
   if (t.id === 'relogin') { try { await signOutUser(); await signIn(); } catch (err) { gate('<h1>تعذّر الدخول</h1><p class="err">' + esc(err.message || err) + '</p>'); } return; }
   if (t.id === 'out') { await signOutUser(); return; }
+  if (t.id === 'copymails') {
+    const v = t.dataset.mails || '';
+    try { await navigator.clipboard.writeText(v); } catch (err) { const ta = document.createElement('textarea'); ta.value = v; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e2) {} ta.remove(); }
+    t.textContent = '✓ نُسخت ' + v.split(',').length + ' إيميلات. الصقها في خانة المشاركة في Google Drive'; return;
+  }
   if (t.id === 'login') { try { await signIn(); } catch (err) { if (!(err && err.code === 'auth/popup-closed-by-user')) gate('<h1>تعذّر الدخول</h1><p class="err">' + esc(err.message || err) + '</p>'); } return; }
   if (t.id === 'add') {
     const v = ($('#newmail').value || '').trim().toLowerCase();

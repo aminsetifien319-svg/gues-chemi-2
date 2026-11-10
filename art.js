@@ -44,6 +44,7 @@ export const THEMES = {
   bio: { a: '#22a35a', b: '#0f5a36', c: '#082a1c', name: 'البيولوجيا الخلوية' },
   stat: { a: '#f08a1c', b: '#8a3f05', c: '#2c1606', name: 'الإحصاء الحيوي' },
   ana: { a: '#e0464e', b: '#7a1420', c: '#2e080d', name: 'التشريح' },
+  hist: { a: '#c8903a', b: '#6b4414', c: '#2a1a07', name: 'تاريخ الصيدلة' },
 };
 export const theme = (k) => THEMES[k] || THEMES.gen;
 
@@ -53,6 +54,7 @@ const ICONS = {
   org: '<path d="M16 4l10.4 6v12L16 28 5.6 22V10z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="16" cy="16" r="5.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M26.4 10l3.6-2M16 4V1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   bio: '<path d="M16 3c7 0 13 5.5 13 13s-6 13-13 13S3 23 3 16 9 3 16 3z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="14" cy="14" r="5" fill="currentColor" opacity=".85"/><circle cx="22" cy="21" r="1.6" fill="currentColor"/><circle cx="9" cy="22" r="1.3" fill="currentColor"/><path d="M20 9c2 0 4 1 4 3" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>',
   stat: '<path d="M4 28h24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="6" y="18" width="4" height="10" rx="1" fill="currentColor" opacity=".6"/><rect x="12" y="11" width="4" height="17" rx="1" fill="currentColor" opacity=".8"/><rect x="18" y="14" width="4" height="14" rx="1" fill="currentColor" opacity=".7"/><rect x="24" y="21" width="4" height="7" rx="1" fill="currentColor" opacity=".55"/><path d="M4 22C9 22 10 6 16 6s7 16 12 16" fill="none" stroke="currentColor" stroke-width="1.8"/>',
+  hist: '<path d="M9 5h14v3H9zM11 8v13M21 8v13M7 21h18v3H7zM5 24h22v3H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M16 10v8M13 14h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   ana: '<circle cx="16" cy="6" r="3.4" fill="currentColor"/><path d="M16 10v10M9 14l7-2 7 2M16 20l-5 9M16 20l5 9" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>',
 };
 export function subjIcon(k, cls) { return '<svg class="' + (cls || 'sico') + '" viewBox="0 0 32 32" aria-hidden="true">' + (ICONS[k] || ICONS.gen) + '</svg>'; }
@@ -63,6 +65,7 @@ const MOTIF = {
   org: '<g fill="none" stroke="#fff" stroke-width="1.3"><path d="M30 20l17 10v20l-17 10-17-10V30z"/><path d="M47 30l17-10 17 10v20l-17 10M81 50l17 10"/><path d="M100 95l12 7v14l-12 7-12-7v-14z"/></g><text x="98" y="40" font-family="Arial" font-size="13" fill="#fff">OH</text>',
   bio: '<g fill="none" stroke="#fff" stroke-width="1.2"><path d="M40 14c15 0 26 11 26 26S55 66 40 66 14 55 14 40s11-26 26-26z"/><circle cx="36" cy="36" r="8"/><path d="M96 80c0 10 14 10 14 20s-14 10-14 20M110 80c0 10-14 10-14 20s14 10 14 20"/><path d="M98 88h10M98 112h10"/></g><circle cx="52" cy="50" r="2" fill="#fff"/>',
   stat: '<g fill="none" stroke="#fff" stroke-width="1.2"><path d="M10 60c12 0 14-40 25-40s13 40 25 40"/><path d="M10 60h50"/><path d="M80 120v-20h8v20M92 120v-34h8v34M104 120v-26h8v26"/></g><text x="80" y="40" font-family="Arial" font-size="15" fill="#fff">x̄ σ</text>',
+  hist: '<g fill="none" stroke="#fff" stroke-width="1.3"><path d="M20 40h40M24 40v-14M56 40v-14M24 26h32l-16-10z"/><path d="M20 40v6h40v-6"/><path d="M92 100c0-14 22-14 22 0 0 12-22 12-22 0zM103 86v-8M97 78h12"/></g>',
   ana: '<g fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round"><path d="M22 30c-6-6 2-14 8-8l30 30c6-6 14 2 8 8s-2 6-8 8-14-2-8-8L22 30c-6 6-14-2-8-8s2-6 8-8z" transform="translate(-4 -4) scale(.85)"/><path d="M100 70c-9 0-14 9-9 17 4 6 9 8 9 8s5-2 9-8c5-8 0-17-9-17z"/><path d="M100 72v10"/></g>',
 };
 export function subjMotif(k) {

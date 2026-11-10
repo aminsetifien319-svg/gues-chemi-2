@@ -455,8 +455,8 @@ function vidBox(ch, p) {
   const ok = L.filter((v) => v && (DRV.test(v.id || '') || YTV.test(v.yt || '')));
   if (!ok.length) return '';
   const yts = ok.filter((v) => v.yt), drv = ok.filter((v) => !v.yt);
-  return '<section class="vids">' + (yts.length > 1 ? ytList(yts) : yts.map(ytBox).join('')) + drv.map((v) => '<div class="vid"><div class="vfr"><iframe src="https://drive.google.com/file/d/' + v.id + '/preview" title="' + esc(v.t || 'فيديو الدرس') + '" allow="autoplay; fullscreen" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>' +
-    '<p class="vbar"><span>🎬 ' + esc(v.t || 'فيديو الدرس') + '</span><a href="https://drive.google.com/file/d/' + v.id + '/view" target="_blank" rel="noopener">افتح في Google Drive ↗</a></p>' +
+  return '<section class="vids">' + (yts.length > 1 ? ytList(yts) : yts.map(ytBox).join('')) + drv.map((v) => '<div class="vid"><div class="vfr"><iframe src="https://drive.google.com/file/d/' + v.id + '/preview" title="' + esc(v.t || 'فيديو الدرس') + '" allow="autoplay" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>' +
+    '<p class="vbar"><span>🎬 ' + esc(v.t || 'فيديو الدرس') + '</span><a href="https://drive.google.com/file/d/' + v.id + '/view" target="_blank" rel="noopener">افتح في Google Drive ↗</a><button type="button" class="btn sm" data-vfs>⛶ ملء الشاشة</button></p>' +
     '<p class="vhint">إن لم يظهر الفيديو: افتح الموقع في Chrome بنفس حساب Gmail المقبول، أو اضغط «افتح في Google Drive».</p></div>').join('') + '</section>';
 }
 // عدة فيديوهات يوتيوب لنفس الصفحة: مشغّل واحد + قائمة أجزاء، وينتقل للجزء التالي تلقائياً
@@ -474,7 +474,7 @@ function dock(r) {
     const yts = L.filter((v) => v.yt), drv = L.filter((v) => !v.yt);
     DOCK.className = 'wrap reader vdock' + (dockMini() ? ' mini' : '');
     DOCK.style.setProperty('--c', 'var(--c' + ch.id + ')');
-    DOCK.innerHTML = (yts.length ? ytList(yts, { mini: 1 }) : '') + drv.map((v) => '<div class="vid"><div class="vfr"><iframe src="https://drive.google.com/file/d/' + v.id + '/preview" title="' + esc(v.t || 'فيديو') + '" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe></div><p class="vbar"><span>🎬 ' + esc(v.t || 'فيديو') + '</span><a href="https://drive.google.com/file/d/' + v.id + '/view" target="_blank" rel="noopener">افتح في Google Drive ↗</a></p></div>').join('');
+    DOCK.innerHTML = (yts.length ? ytList(yts, { mini: 1 }) : '') + drv.map((v) => '<div class="vid"><div class="vfr"><iframe src="https://drive.google.com/file/d/' + v.id + '/preview" title="' + esc(v.t || 'فيديو') + '" allow="autoplay" loading="lazy"></iframe></div><p class="vbar"><span>🎬 ' + esc(v.t || 'فيديو') + '</span><a href="https://drive.google.com/file/d/' + v.id + '/view" target="_blank" rel="noopener">افتح في Google Drive ↗</a><button type="button" class="btn sm" data-vfs>⛶</button></p></div>').join('');
   }
   DOCK.hidden = false;
 }
@@ -557,7 +557,7 @@ document.addEventListener('click', (e) => {
       const fr = box.querySelector('iframe'); if (fr) { if (on) { ytCmd(fr, 'loadModule', ['captions']); ytCmd(fr, 'setOption', ['captions', 'reload', true]); } else ytCmd(fr, 'unloadModule', ['captions']); }
       toast(on ? 'الترجمة مفعّلة (إن كانت متوفرة لهذا الفيديو) — اللغة من ⚙ داخل المشغّل' : 'الترجمة متوقفة');
     }
-    else { const f = box.querySelector('.vfr'); if (document.fullscreenElement) document.exitFullscreen(); else { const rq = f.requestFullscreen || f.webkitRequestFullscreen; if (rq) rq.call(f); } }
+    else { const f = box.querySelector('.vfr'); if (document.fullscreenElement) document.exitFullscreen(); else { const rq = f.requestFullscreen || f.webkitRequestFullscreen; if (rq) { const pr = rq.call(f); try { Promise.resolve(pr).then(() => { try { screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {}); } catch (e) {} }).catch(() => {}); } catch (e) {} } } }
     return;
   }
   const b = e.target.closest && e.target.closest('[data-plgo]'); if (!b) return;
@@ -647,7 +647,7 @@ function home() {
     '<div class="hero"><div class="hero-art">' + subjIcon(CURS, 'hico') + '</div><div class="hero-in">' + subjTabs('hero') + '<p class="kick lat">' + subjIcon(CURS, 'kico') + esc(subj().en) + ' · 1st-year Pharmacy</p>' +
     '<h1>' + (first ? 'أهلاً ' + esc(first) + '، ' : '') + esc(subj().ar) + ' كاملة، شابيطر بشابيطر</h1>' +
     '<p class="lead">اقرأ كل درس مكتوباً، حلّ كيسيام الامتحانات والكيسيام المقترح، راجع أخطاءك كل يوم، ثم اختبر نفسك في امتحان تجريبي بالوقت.</p>' +
-    '<form class="hsearch" data-search><input type="search" name="q" placeholder="ابحث في الدروس والأسئلة… مثلاً ' + ({ org: 'hybridization أو alkene', bio: 'Gram أو virus', stat: 'median أو variance', ana: 'sagittal أو تشريح' }[CURS] || 'Slater أو هوند') + '" aria-label="بحث" autocomplete="off"><button type="submit" class="btn pri">بحث</button></form>' +
+    '<form class="hsearch" data-search><input type="search" name="q" placeholder="ابحث في الدروس والأسئلة… مثلاً ' + ({ org: 'hybridization أو alkene', bio: 'Gram أو virus', stat: 'median أو variance', ana: 'sagittal أو تشريح', hist: 'Hippocrates أو جالينوس' }[CURS] || 'Slater أو هوند') + '" aria-label="بحث" autocomplete="off"><button type="submit" class="btn pri">بحث</button></form>' +
     '<div class="kpis"><span><b class="lat">' + nOff + '</b>كيسيام رسمي محلول</span><span><b class="lat">' + nPro + '</b>كيسيام مقترح</span><span><b class="lat">' + tp + '</b>صفحة دروس</span><span><b class="lat">' + M.chapters.length + '</b>شابيطرات</span></div>' +
     '<p class="acts">' + (prog.last ? '<a class="btn pri" href="' + esc(prog.last) + '">تابع من حيث توقفت ←</a>' : '<a class="btn pri" href="#/c/' + M.chapters[0].id + '">ابدأ بالشابيطر الأول ←</a>') + '<a class="btn ghost" href="#/exam">امتحان تجريبي</a></p>' +
     '</div></div>' +

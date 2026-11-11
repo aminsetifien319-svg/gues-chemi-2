@@ -977,3 +977,10 @@ html[data-theme="dark"] .yrs.nokey{background:#3a2c10;color:#f3cf86}
 @media (pointer:coarse){ .drv.on iframe{width:125%;height:125%;transform:scale(.8);transform-origin:0 0} }
 .vfr.drv:fullscreen iframe,.vfr.drv:-webkit-full-screen iframe{width:125%;height:125%;transform:scale(.8);transform-origin:0 0}
 .drv{direction:ltr}
+/* v35: على الهاتف يبقى غلاف المادة خلفية، لكن بحجمه الكامل عرضاً (غير مكبّر) */
+@media (max-width:700px){
+  .hero.hcov .hero-bg,[dir="rtl"] .hero.hcov .hero-bg,html[dir="rtl"] .hero.hcov .hero-bg{position:absolute;inset:0;width:100%;height:100%;background-size:175% auto;background-position:92% 0;
+    -webkit-mask-image:linear-gradient(180deg,#000 0,#000 30%,transparent 62%);mask-image:linear-gradient(180deg,#000 0,#000 30%,transparent 62%)}
+  .hero.hcov .hero-bg.ok{opacity:.75}
+  .hero.hcov::after{background:linear-gradient(180deg,rgba(7,16,31,.15) 0,rgba(7,16,31,.35) 40%,rgba(7,16,31,.6) 100%)}
+}

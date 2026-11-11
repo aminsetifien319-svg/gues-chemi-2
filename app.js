@@ -2,9 +2,9 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
-} from './firebase.js?v=28';
-import { fmt, typeset } from './rich.js?v=28';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=28';
+} from './firebase.js?v=34';
+import { fmt, typeset } from './rich.js?v=34';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=34';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -205,7 +205,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 32;
+const APP_V = 34;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -455,7 +455,7 @@ function vidBox(ch, p) {
   const ok = L.filter((v) => v && (DRV.test(v.id || '') || YTV.test(v.yt || '')));
   if (!ok.length) return '';
   const yts = ok.filter((v) => v.yt), drv = ok.filter((v) => !v.yt);
-  return '<section class="vids">' + (yts.length > 1 ? ytList(yts) : yts.map(ytBox).join('')) + drv.map((v) => '<div class="vid"><div class="vfr"><iframe src="https://drive.google.com/file/d/' + v.id + '/preview" title="' + esc(v.t || 'فيديو الدرس') + '" allow="autoplay" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>' +
+  return '<section class="vids">' + (yts.length > 1 ? ytList(yts) : yts.map(ytBox).join('')) + drv.map((v) => '<div class="vid">' + drvFrame(v) + '' +
     '<p class="vbar"><span>🎬 ' + esc(v.t || 'فيديو الدرس') + '</span><a href="https://drive.google.com/file/d/' + v.id + '/view" target="_blank" rel="noopener">افتح في Google Drive ↗</a><button type="button" class="btn sm" data-vfs>⛶ ملء الشاشة</button></p>' +
     '<p class="vhint">إن لم يظهر الفيديو: افتح الموقع في Chrome بنفس حساب Gmail المقبول، أو اضغط «افتح في Google Drive».</p></div>').join('') + '</section>';
 }
@@ -474,7 +474,7 @@ function dock(r) {
     const yts = L.filter((v) => v.yt), drv = L.filter((v) => !v.yt);
     DOCK.className = 'wrap reader vdock' + (dockMini() ? ' mini' : '');
     DOCK.style.setProperty('--c', 'var(--c' + ch.id + ')');
-    DOCK.innerHTML = (yts.length ? ytList(yts, { mini: 1 }) : '') + drv.map((v) => '<div class="vid"><div class="vfr"><iframe src="https://drive.google.com/file/d/' + v.id + '/preview" title="' + esc(v.t || 'فيديو') + '" allow="autoplay" loading="lazy"></iframe></div><p class="vbar"><span>🎬 ' + esc(v.t || 'فيديو') + '</span><a href="https://drive.google.com/file/d/' + v.id + '/view" target="_blank" rel="noopener">افتح في Google Drive ↗</a><button type="button" class="btn sm" data-vfs>⛶</button></p></div>').join('');
+    DOCK.innerHTML = (yts.length ? ytList(yts, { mini: 1 }) : '') + drv.map((v) => '<div class="vid">' + drvFrame(v) + '<p class="vbar"><span>🎬 ' + esc(v.t || 'فيديو') + '</span><a href="https://drive.google.com/file/d/' + v.id + '/view" target="_blank" rel="noopener">افتح في Google Drive ↗</a><button type="button" class="btn sm" data-vfs>⛶</button></p></div>').join('');
   }
   DOCK.hidden = false;
 }
@@ -546,8 +546,11 @@ document.addEventListener('change', (e) => {
   const fr = box.querySelector('iframe'); if (fr) ytCmd(fr, 'setPlaybackRate', [+sel.value]);
 });
 document.addEventListener('click', (e) => {
+  const dp = e.target.closest && e.target.closest('[data-dplay]');
+  if (dp) { drvPlay(dp.closest('.drv')); return; }
   const c = e.target.closest && e.target.closest('[data-yplay],[data-plstep],[data-pllist],[data-vfs],[data-vcc]');
   if (c) {
+    if (c.dataset.vfs !== undefined) { const d = c.closest('.vid') && c.closest('.vid').querySelector('.drv'); if (d) drvPlay(d); }
     const box = c.closest('.vid');
     if (c.dataset.yplay !== undefined) ytActivate(box, true);
     else if (c.dataset.plstep) { const [id, d] = c.dataset.plstep.split(':'); plGo(id, +box.dataset.i + +d, true); }
@@ -602,11 +605,26 @@ function ytListen(root) {
 }
 new MutationObserver(() => ytListen()).observe(document.documentElement, { childList: true, subtree: true });
 function origFigs(ch, p) { return [p.img].concat(p.imgs || []).map((im) => fig(im, 'zoomable page' + (ch.ratio ? ' tall' : ''), ch.ratio || '16 / 9')).join(''); }
+// Drive: our own full poster (Drive's mobile preview crops it); the Drive player loads on tap
+function drvFrame(v) {
+  return '<div class="vfr drv" data-drv="' + esc(v.id) + '" data-t="' + esc(v.t || 'فيديو الدرس') + '"><button type="button" class="dposter" data-dplay aria-label="تشغيل الفيديو">' +
+    '<img src="https://drive.google.com/thumbnail?id=' + encodeURIComponent(v.id) + '&sz=w1280" alt="" loading="lazy" referrerpolicy="no-referrer">' +
+    '<span class="dplay" aria-hidden="true"></span></button></div>';
+}
+document.addEventListener('error', (e) => { const t = e.target; if (t && t.matches && t.matches('.dposter img')) t.remove(); }, true);
+function drvPlay(fr) {
+  if (!fr || fr.querySelector('iframe')) return;
+  fr.innerHTML = '<iframe src="https://drive.google.com/file/d/' + encodeURIComponent(fr.dataset.drv) + '/preview" title="' + esc(fr.dataset.t || '') + '" allow="autoplay" referrerpolicy="strict-origin-when-cross-origin"></iframe>';
+  fr.classList.add('on');
+}
+const isCov = (ch) => ch && ch.art === 'cover' && ch.cover;
+const bgDiv = (id, cls) => '<span class="' + cls + '" data-bg="' + esc(id) + '" aria-hidden="true"></span>';
 function fig(id, cls, ratio) {
   return '<figure class="pg ' + (cls || '') + '" data-img="' + esc(id) + '" style="aspect-ratio:' + (ratio || '16 / 9') + '"><span class="sk"></span><i class="wm"></i></figure>';
 }
 function hydrate(root) {
   typeset(root || VIEW);
+  $$('[data-bg]', root || VIEW).forEach((e) => { if (e.dataset.done) return; e.dataset.done = '1'; getImage(e.dataset.bg).then((src) => { e.style.backgroundImage = 'url("' + src + '")'; e.classList.add('ok'); }).catch(() => {}); });
   $$('.wm', root || VIEW).forEach((w) => { if (!w.style.backgroundImage) w.style.backgroundImage = watermark(); });
   $$('figure[data-img]', root || VIEW).forEach((f) => {
     if (f.dataset.done) return;
@@ -634,8 +652,8 @@ function home() {
   const cards = M.chapters.map((ch) => {
     const s = chStats(ch); tp += s.pages; tr += s.read; tq += s.qn; ta += s.qa; tok += s.qok;
     const off = ch.qcm.find((x) => x.key === 'official'), pro = ch.qcm.find((x) => x.key === 'proposed');
-    return '<a class="ccard" href="#/c/' + ch.id + '" style="--c:var(--c' + ch.id + ')">' +
-      '<span class="cnum"><small>CH</small><b class="lat">' + cn(ch) + '</b></span>' + '<span class="cart">' + chArt(ch) + '</span>' +
+    return '<a class="ccard' + (isCov(ch) ? ' cov' : '') + '" href="#/c/' + ch.id + '" style="--c:var(--c' + ch.id + ')">' + (isCov(ch) ? bgDiv(ch.cover, 'cban') : '') +
+      '<span class="cnum"><small>CH</small><b class="lat">' + cn(ch) + '</b></span>' + (isCov(ch) ? '' : '<span class="cart">' + chArt(ch) + '</span>') +
       '<span class="ctx"><span class="lat en">' + esc(ch.en) + '</span><span class="ar">' + esc(ch.ar) + '</span><span class="tp lat">' + esc(ch.topics) + '</span>' +
       '<span class="facts">' + (ch.share != null ? '<span><b class="lat">' + ch.share + '%</b> من الامتحان</span>' : '') + '<span><b class="lat">' + s.pages + '</b> صفحة</span><span><b class="lat">' + (off ? off.q.length : 0) + '</b> رسمي</span><span><b class="lat">' + (pro ? pro.q.length : 0) + '</b> مقترح</span></span>' +
       '<span class="pbar"><i style="width:' + pct(s.read, s.pages) + '%"></i></span><span class="pl">الدروس <b class="lat">' + s.read + '/' + s.pages + '</b> · الكيسيام <b class="lat">' + s.qa + '/' + s.qn + '</b>' + (s.qa ? ' · صحيح <b class="lat">' + pct(s.qok, s.qa) + '%</b>' : '') + '</span></span></a>';
@@ -644,7 +662,7 @@ function home() {
   const first = (me.name || '').split(' ')[0];
   const nw = wrongKeys().length, nf = favKeys().length + favPages().length, nd = dueKeys().length, lastEx = prog.hist[0];
   VIEW.innerHTML =
-    '<div class="hero"><div class="hero-art">' + subjIcon(CURS, 'hico') + '</div><div class="hero-in">' + subjTabs('hero') + '<p class="kick lat">' + subjIcon(CURS, 'kico') + esc(subj().en) + ' · 1st-year Pharmacy</p>' +
+    '<div class="hero' + (M.hero ? ' hcov' : '') + '">' + (M.hero ? bgDiv(M.hero, 'hero-bg') : '<div class="hero-art">' + subjIcon(CURS, 'hico') + '</div>') + '<div class="hero-in">' + subjTabs('hero') + '<p class="kick lat">' + subjIcon(CURS, 'kico') + esc(subj().en) + ' · 1st-year Pharmacy</p>' +
     '<h1>' + (first ? 'أهلاً ' + esc(first) + '، ' : '') + esc(subj().ar) + ' كاملة، شابيطر بشابيطر</h1>' +
     '<p class="lead">اقرأ كل درس مكتوباً، حلّ كيسيام الامتحانات والكيسيام المقترح، راجع أخطاءك كل يوم، ثم اختبر نفسك في امتحان تجريبي بالوقت.</p>' +
     '<form class="hsearch" data-search><input type="search" name="q" placeholder="ابحث في الدروس والأسئلة… مثلاً ' + ({ org: 'hybridization أو alkene', bio: 'Gram أو virus', stat: 'median أو variance', ana: 'sagittal أو تشريح', hist: 'Hippocrates أو جالينوس' }[CURS] || 'Slater أو هوند') + '" aria-label="بحث" autocomplete="off"><button type="submit" class="btn pri">بحث</button></form>' +
@@ -661,7 +679,9 @@ function home() {
     '<a class="tool wrong" href="#/mistakes"><i>✗</i><b>أخطائي</b><small>' + (nw ? '<span class="lat">' + nw + '</span> سؤالاً تحتاج مراجعة' : 'لا أخطاء الآن') + '</small></a>' +
     '<a class="tool fav" href="#/fav"><i>★</i><b>المفضلة</b><small>' + (nf ? '<span class="lat">' + nf + '</span> عنصراً محفوظاً' : 'احفظ أي درس أو سؤال بالنجمة') + '</small></a>' +
     '<a class="tool cards" href="#/cards"><i>❐</i><b>بطاقات المراجعة</b><small>' + (fcDueAll() ? '<span class="lat">' + fcDueAll() + '</span> بطاقة حان موعدها' : 'التعاريف والقوانين في بطاقات سريعة') + '</small></a></div>' +
+    (M.overview && M.overview.length ? '<a class="ovban" href="#/stats">' + bgDiv(M.overview[0].img, 'ovimg') + '<span class="ovtx"><b>📊 ' + esc(M.overview[0].ar || 'إحصائيات الامتحان') + '</b><small>كم سؤالاً جاء من كل درس في كل سنة، ووزن كل درس في الامتحان</small><i>افتح ←</i></span></a>' : '') +
     '<h2 class="h2">الشابيطرات</h2><div class="cgrid">' + cards + '</div></div>';
+  hydrate();
 }
 
 /* =================================================================
@@ -690,7 +710,7 @@ function chapter(ch) {
       '<span class="pbar"><i style="width:' + pct(a, set.q.length) + '%"></i></span><span class="pl">' + (a ? 'أجبت عن <b class="lat">' + a + '/' + set.q.length + '</b> · صحيح <b class="lat">' + ok + '</b>' : 'لم تبدأ بعد') + '</span><span class="go">' + (a && a < set.q.length ? 'تابع' : a ? 'راجع' : 'ابدأ') + ' ←</span></a>';
   }).join('');
   const nw = wrongKeys(ch.id).length;
-  VIEW.innerHTML = '<div class="chero" style="--c:var(--c' + ch.id + ')"><div class="chart-bg">' + chArt(ch, 'art big') + '</div><div class="wrap chero-in"><div class="ctext"><nav class="crumb inv"><a href="#/">الرئيسية</a><span>›</span><b>CH ' + cn(ch) + '</b></nav>' +
+  VIEW.innerHTML = '<div class="chero' + (isCov(ch) ? ' cov' : '') + '" style="--c:var(--c' + ch.id + ')">' + (isCov(ch) ? bgDiv(ch.cover, 'chero-bg') : '<div class="chart-bg">' + chArt(ch, 'art big') + '</div>') + '<div class="wrap chero-in"><div class="ctext"><nav class="crumb inv"><a href="#/">الرئيسية</a><span>›</span><b>CH ' + cn(ch) + '</b></nav>' +
     '<p class="kick lat">Chapter ' + cn(ch) + '</p><h1><span class="lat">' + esc(ch.en) + '</span><span class="ar">' + esc(ch.ar) + '</span></h1><p class="tp lat">' + esc(ch.topics) + '</p>' +
     (ch.share != null ? '<div class="chips"><span><b class="lat">' + ch.share + '%</b> من أسئلة الامتحان</span><span>الترتيب <b class="lat">#' + ch.rank + '</b></span><span><b class="lat">' + ch.app + '</b> ظهوراً في الامتحانات</span></div>' : '<div class="chips"><span><b class="lat">' + FLOW[ch.id].length + '</b> صفحة</span><span><b class="lat">' + ch.qcm.reduce((a, x) => a + x.q.length, 0) + '</b> سؤال كيسيام</span></div>') +
     '<p class="acts"><a class="btn pri" href="#/c/' + ch.id + '/p/' + FLOW[ch.id][0].n + '">' + (s.read ? 'تابع الدروس' : 'ابدأ الدرس') + ' ←</a><a class="btn ghost" href="#/c/' + ch.id + '/q/official">كيسيام الامتحانات</a></p></div>' +
@@ -716,7 +736,7 @@ function page(ch, i) {
   const nav = (x, dir) => x ? '<a class="pn ' + dir + '" data-nav="' + dir + '" href="#/c/' + ch.id + '/p/' + x.n + '"><small>' + (dir === 'prev' ? '→ السابق' : 'التالي ←') + '</small><span class="lat">' + esc(x.t) + '</span></a>' : '<span class="pn empty"></span>';
   const endNext = next ? nav(next, 'next') : '<a class="pn next" data-nav="next" href="#/c/' + ch.id + '/q/official"><small>انتهت الدروس ←</small><span>انتقل إلى كيسيام الامتحانات</span></a>';
   VIEW.innerHTML = '<div class="wrap reader">' + crumbs([['CH ' + cn(ch) + ' · ' + esc(ch.ar), '#/c/' + ch.id], [esc(p.secAr)]]) +
-    '<header class="rhead" style="--c:var(--c' + ch.id + ')"><span class="rart">' + chArt(ch) + '</span><div><p class="kick"><span>' + esc(p.secAr) + '</span>' + (p.rev ? '' : '<span class="lat"> · ' + esc(p.sec) + '</span>') + '</p><h1 class="lat">' + esc(p.t) + '</h1><p class="artitle" dir="rtl" data-artitle></p></div>' +
+    '<header class="rhead" style="--c:var(--c' + ch.id + ')">' + (isCov(ch) ? bgDiv(ch.cover, 'rart rcov') : '<span class="rart">' + chArt(ch) + '</span>') + '<div><p class="kick"><span>' + esc(p.secAr) + '</span>' + (p.rev ? '' : '<span class="lat"> · ' + esc(p.sec) + '</span>') + '</p><h1 class="lat">' + esc(p.t) + '</h1><p class="artitle" dir="rtl" data-artitle></p></div>' +
     '<div class="rmeta">' + star('p' + p.n, true) + '<span class="lat" dir="ltr">' + k + ' / ' + secPages.length + '</span><span class="sep"></span><span>صفحة <b class="lat">' + (i + 1) + '</b> من <b class="lat">' + list.length + '</b></span></div></header>' +
     '<div class="rbar"><i style="width:' + pct(i + 1, list.length) + '%;background:var(--c' + ch.id + ')"></i></div>' +
     '<div class="rtools">' + modeSwitch('p') + '</div>' +

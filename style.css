@@ -5,7 +5,7 @@
   --bg:#f1f4f9; --card:#fff; --ink:#0f1b2d; --mut:#5a6a7f; --line:#dfe6ef; --soft:#eef3f8;
   --ok:#1b9a57; --okbg:#e8f6ee; --ko:#d4443b; --kobg:#fdecea; --warn:#b26b00;
   --c1:#0b86b8; --c2:#6b4fa0; --c3:#1f8f5f; --c4:#0e6b6b; --c5:#c2562a; --c11:#6a4fc4; --c12:#0f8f86; --c13:#b5367a; --c14:#2f6fd0; --c15:#c0392b;
-  --c21:#2e8b57; --c22:#7a5c1e; --c23:#b23a48; --c31:#1d6fa5; --c32:#5b4bb7; --c33:#0f8a8a; --c34:#c2562a; --c41:#9c2b2b;
+  --c21:#2e8b57; --c22:#7a5c1e; --c23:#b23a48; --c31:#1d6fa5; --c32:#5b4bb7; --c33:#0f8a8a; --c34:#c2562a; --c41:#9c2b2b; --c42:#b5651d; --c43:#a3263e; --c44:#7d2a8c; --c35:#2a7d4f; --c51:#a8742a; --c52:#5e7a2e;
   --r:14px; --sh:0 1px 2px rgba(10,26,51,.06),0 6px 22px rgba(10,26,51,.06);
   --side:290px; --hov:#f6f9fc; --ink2:#2f4157; --line2:#eef2f6; --track:#e5ebf2; --sel:#e6f6fc; --top:60px;
   --fa:'Cairo',system-ui,sans-serif; --fl:'Outfit','Cairo',system-ui,sans-serif;
@@ -915,3 +915,65 @@ html[data-theme="dark"] .yrs.nokey{background:#3a2c10;color:#f3cf86}
 @media (max-width:560px){.pltit{order:-1;flex-basis:100%}.vtools{margin-inline-start:0}}
 /* على الهاتف أزرار يوتيوب (⚙ الجودة، الترجمة، المزيد) في أعلى اليمين: الحاجز يغطي العنوان فقط */
 .vfr .ysh.top{left:0;right:clamp(110px,26%,170px);width:auto}
+
+/* ---------- v33: أغلفة الدروس الجديدة كخلفيات ---------- */
+[data-bg]{background-size:cover;background-position:center;background-repeat:no-repeat;opacity:0;transition:opacity .5s}
+[data-bg].ok{opacity:1}
+/* الرئيسية: غلاف المادة */
+.hero.hcov{background:#07101f}
+.hero-bg{position:absolute;inset-block:0;inset-inline-end:0;width:68%;pointer-events:none;
+  -webkit-mask-image:linear-gradient(to left,#000 0,#000 45%,transparent 100%);mask-image:linear-gradient(to left,#000 0,#000 45%,transparent 100%)}
+[dir="rtl"] .hero-bg,html[dir="rtl"] .hero-bg{-webkit-mask-image:linear-gradient(to right,#000 0,#000 45%,transparent 100%);mask-image:linear-gradient(to right,#000 0,#000 45%,transparent 100%)}
+.hero-bg.ok{opacity:.95}
+.hero.hcov::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(7,16,31,.55),transparent 40%);pointer-events:none}
+.hero.hcov .hero-in{z-index:2}
+.hero.hcov h1,.hero.hcov .lead{text-shadow:0 2px 14px rgba(0,0,0,.6)}
+/* بطاقة الدرس: غلافه في الأعلى */
+.ccard.cov{position:relative;flex-wrap:wrap;overflow:hidden;padding-top:0;border-top:0}
+.ccard.cov .cban{flex:0 0 calc(100% + 36px);margin:0 -18px 2px;height:190px;background-color:#0b1426;border-bottom:4px solid var(--c);transition:transform .4s}
+.ccard.cov:hover .cban{transform:scale(1.03)}
+.ccard.cov .cnum{margin-top:-30px;position:relative;z-index:1;box-shadow:0 6px 16px rgba(0,0,0,.35)}
+/* صفحة الدرس: الغلاف خلفية مموّهة + الغلاف الواضح في العمود */
+.chero.cov{background:#07101f}
+.chero-bg{position:absolute;inset:-40px;filter:blur(22px) saturate(1.2);transform:scale(1.08);pointer-events:none}
+.chero-bg.ok{opacity:.55}
+.chero.cov::before{content:"";position:absolute;inset:0;background:linear-gradient(120deg,rgba(7,16,31,.92) 0,rgba(7,16,31,.7) 55%,rgba(7,16,31,.45) 100%);z-index:0;pointer-events:none}
+.chero.cov .chero-in{z-index:1}
+/* رأس صفحة القراءة: صورة صغيرة من الغلاف */
+.rhead .rart.rcov{width:132px;aspect-ratio:16/9;top:0;border-radius:10px;box-shadow:0 6px 18px rgba(10,26,51,.25)}
+.rhead .rart.rcov.ok{opacity:.95}
+/* لافتة إحصائيات الامتحان */
+.ovban{position:relative;display:flex;align-items:flex-end;min-height:150px;margin:6px 0 22px;border-radius:var(--r);overflow:hidden;box-shadow:var(--sh);background:#0b1426;color:#fff}
+.ovban .ovimg{position:absolute;inset:0;background-position:center top}
+.ovban .ovimg.ok{opacity:.55}
+.ovban::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(7,16,31,.92) 10%,rgba(7,16,31,.3) 100%)}
+.ovban .ovtx{position:relative;z-index:1;display:flex;flex-direction:column;gap:4px;padding:18px 20px;width:100%}
+.ovban b{font-size:18px}.ovban small{color:#c9d6e8}.ovban i{font-style:normal;color:var(--sa,#22c6ee);font-weight:700;margin-top:4px}
+.ovban:hover .ovimg{transform:scale(1.03);transition:transform .4s}
+@media (max-width:700px){
+  .hero-bg{width:100%;-webkit-mask-image:linear-gradient(0deg,transparent 0,#000 70%);mask-image:linear-gradient(0deg,transparent 0,#000 70%)}
+  [dir="rtl"] .hero-bg,html[dir="rtl"] .hero-bg{-webkit-mask-image:linear-gradient(0deg,transparent 0,#000 70%);mask-image:linear-gradient(0deg,transparent 0,#000 70%)}
+  .hero-bg.ok{opacity:.4}
+  .ccard.cov .cban{flex-basis:calc(100% + 28px);margin:0 -14px 2px}
+  .rhead .rart.rcov{width:76px;opacity:.5}
+}
+/* بطاقة الغلاف: رقم الدرس فوق الصورة والنص بكامل العرض */
+.ccard.cov .cban{display:block}
+.ccard.cov .cnum{position:absolute;top:12px;inset-inline-start:12px;margin:0;z-index:2}
+.ccard.cov .ctx{flex:1 1 100%;min-width:0}
+.ccard.cov .tp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.ccard.cov{padding-inline-end:18px}
+.ccard.cov .cban{background-position:left center}
+@media (max-width:700px){.ccard.cov{padding-inline-end:14px}}
+/* v34: مشغّل Drive — غلاف كامل خاص بنا، والمشغّل يُحمَّل عند اللمس */
+.drv{overflow:hidden;background:#05080f}
+.drv .dposter{position:absolute;inset:0;width:100%;height:100%;border:0;padding:0;margin:0;cursor:pointer;background:radial-gradient(ellipse at center,#16233b,#05080f)}
+.drv .dposter img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
+.drv .dplay{position:absolute;left:50%;top:50%;width:72px;height:72px;margin:-36px 0 0 -36px;border-radius:50%;background:rgba(10,18,34,.72);box-shadow:0 0 0 2px rgba(255,255,255,.85),0 10px 30px rgba(0,0,0,.45);transition:transform .2s,background .2s}
+.drv .dplay::after{content:"";position:absolute;left:29px;top:22px;border-style:solid;border-width:14px 0 14px 22px;border-color:transparent transparent transparent #fff}
+.drv .dposter:hover .dplay{transform:scale(1.08);background:rgba(34,198,238,.85)}
+.drv iframe{position:absolute;left:0;top:0;width:100%;height:100%;border:0;direction:ltr}
+/* على الهاتف وفي ملء الشاشة: مساحة أكبر لمشغّل Drive حتى لا تتداخل أزراره (يُرسم بحجم 125% ثم يُصغَّر) */
+@media (pointer:coarse){ .drv.on iframe{width:125%;height:125%;transform:scale(.8);transform-origin:0 0} }
+.vfr.drv:fullscreen iframe,.vfr.drv:-webkit-full-screen iframe{width:125%;height:125%;transform:scale(.8);transform-origin:0 0}
+.drv{direction:ltr}

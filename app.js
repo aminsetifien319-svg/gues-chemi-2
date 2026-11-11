@@ -2,9 +2,9 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
-} from './firebase.js?v=35';
-import { fmt, typeset } from './rich.js?v=35';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=35';
+} from './firebase.js?v=38';
+import { fmt, typeset } from './rich.js?v=38';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=38';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -205,7 +205,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 35;
+const APP_V = 38;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -632,7 +632,7 @@ function hydrate(root) {
     getImage(f.dataset.img).then((src) => {
       const im = new Image();
       im.alt = ''; im.draggable = false; im.decoding = 'async';
-      im.onload = () => { f.style.aspectRatio = im.naturalWidth + ' / ' + im.naturalHeight; f.classList.add('ok'); };
+      im.onload = () => { f.style.aspectRatio = im.naturalWidth + ' / ' + im.naturalHeight; if (im.naturalWidth > 3.2 * im.naturalHeight) f.classList.add('wide'); f.classList.add('ok'); };
       im.src = src;
       f.insertBefore(im, f.firstChild);
     }).catch(() => { f.classList.add('bad'); const s = f.querySelector('.sk'); if (s) s.textContent = 'تعذّر تحميل الصورة. تحقق من الاتصال ثم حدّث الصفحة.'; });
@@ -1010,7 +1010,7 @@ async function buildIndex() {
   if (IDX) return IDX;
   const out = [];
   for (const ch of M.chapters) {
-    let T = null; try { T = await chText(ch); } catch (e) {}
+    let T = null; try { T = ch.stext ? await getImage(ch.stext).then((s) => JSON.parse(s)) : await chText(ch); } catch (e) {}   // stext: نص البحث فقط للدروس بالتصميم الجديد
     FLOW[ch.id].forEach((p) => {
       const P = T && T.pages[p.n];
       const body = P ? plainText(P.html) : '';
@@ -1136,10 +1136,11 @@ function buildExam(n, src, chs, weighted) {
 let exForm = null;
 function examHome() {
   const e = prog.exam;
+  if (exForm && (exForm.sub !== CURS || exForm.chs.some((id) => !M.chapters.some((c) => c.id === id)))) exForm = null;   // subject changed: rebuild the form
   if (!exForm) {
     const ids = M.chapters.map((c) => c.id), src0 = poolFor('official', ids).length >= 40 ? 'official' : 'all', np = poolFor(src0, ids).length;
     const n0 = [40, 20].find((x) => x <= np) || 20;
-    exForm = { n: n0, src: src0, chs: ids, weighted: M.chapters.some((c) => c.share != null), tmode: 't', h: Math.floor(EXAM_MAX[n0] / 60), m: EXAM_MAX[n0] % 60, pq: 90 };
+    exForm = { sub: CURS, n: n0, src: src0, chs: ids, weighted: M.chapters.some((c) => c.share != null), tmode: 't', h: Math.floor(EXAM_MAX[n0] / 60), m: EXAM_MAX[n0] % 60, pq: 90 };
   }
   const f = exForm;
   const hist = prog.hist.map((h) => '<a class="hrow" href="#/exam/r/' + h.id + '"><span class="lat">' + new Date(h.end).toLocaleDateString('fr-DZ') + '</span><span>' + h.n + ' سؤالاً · ' + ({ all: 'رسمي + مقترح', proposed: 'مقترح', official: 'رسمي' }[h.src] || '') + (h.mode === 'q' ? ' · وقت لكل سؤال' : '') + '</span><b class="lat ' + (h.ok / h.n >= 0.5 ? 'okc' : 'koc') + '">' + h.ok + '/' + h.n + ' · ' + pct(h.ok, h.n) + '%</b><span class="lat">' + fmtT(h.used) + '</span></a>').join('');

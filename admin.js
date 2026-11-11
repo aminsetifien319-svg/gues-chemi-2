@@ -2,8 +2,8 @@
 import {
   watchUser, signIn, signOutUser, isAdminUser, listRequests, listAllowed,
   approve, reject, removeAllowed, addAllowed, authAgeHours, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, loadSubjects, saveSubjects, DEFAULT_SUBJECTS, configMissing
-} from './firebase.js?v=35';
-import { mountEditor } from './editor.js?v=35';
+} from './firebase.js?v=38';
+import { mountEditor } from './editor.js?v=38';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const box = $('#box');
@@ -182,9 +182,12 @@ function keepEdits(nm, cur) {
   if (cur.vid) nm.vid = cur.vid;   // روابط الفيديو
   if (cur.cvid) nm.cvid = cur.cvid;
   if (cur.fix) {
-    nm.fix = cur.fix;
-    const A = (cur.fix && cur.fix.ans) || {};
-    nm.chapters.forEach((c) => c.qcm.forEach((s) => s.q.forEach((q) => { const k = 'c' + c.id + s.key[0] + q.n; if (A[k]) q.ans = A[k]; })));
+    // تصحيحات المحرّر تبقى فقط للأسئلة التي لم تتغيّر صورتها؛ إن تغيّر المحتوى تُحذف حتى لا تُطبَّق على سؤال آخر بنفس الرقم
+    const oldImg = {};
+    (cur.chapters || []).forEach((c) => (c.qcm || []).forEach((s) => s.q.forEach((q) => { oldImg['c' + c.id + s.key[0] + q.n] = q.q; })));
+    const A = Object.assign({}, (cur.fix && cur.fix.ans) || {}), keep = {};
+    nm.chapters.forEach((c) => c.qcm.forEach((s) => s.q.forEach((q) => { const k = 'c' + c.id + s.key[0] + q.n; if (A[k] && oldImg[k] === q.q) { keep[k] = A[k]; q.ans = A[k]; } })));
+    nm.fix = Object.assign({}, cur.fix, { ans: keep });
   }
 }
 // حزمة إضافية (مثل البطاقات): ترفع ملفاتها ثم تُضاف إلى الفهرس الموجود

@@ -989,3 +989,9 @@ html[data-theme="dark"] .yrs.nokey{background:#3a2c10;color:#f3cf86}
   figure.wide.ok{direction:ltr;aspect-ratio:auto!important;height:130px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
   figure.wide.ok img{height:100%;width:auto;max-width:none}
 }
+/* v39: الحاسوب — يظهر جانب الرسم من الغلاف فقط (بدون كتابة الغلاف المقصوصة)، والهاتف كما هو */
+@media (min-width:701px){
+  .hero.hcov .hero-bg,[dir="rtl"] .hero.hcov .hero-bg,html[dir="rtl"] .hero.hcov .hero-bg{width:64%;background-size:auto 125%;background-position:92% 38%;
+    -webkit-mask-image:linear-gradient(to right,transparent 0,#000 30%,#000 62%,transparent 100%);mask-image:linear-gradient(to right,transparent 0,#000 30%,#000 62%,transparent 100%)}
+  .hero.hcov .hero-bg.ok{opacity:.8}
+}

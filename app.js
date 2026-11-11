@@ -2,9 +2,9 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
-} from './firebase.js?v=38';
-import { fmt, typeset } from './rich.js?v=38';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=38';
+} from './firebase.js?v=40';
+import { fmt, typeset } from './rich.js?v=40';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=40';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -205,7 +205,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 38;
+const APP_V = 40;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -658,7 +658,7 @@ function home() {
       '<span class="facts">' + (ch.share != null ? '<span><b class="lat">' + ch.share + '%</b> من الامتحان</span>' : '') + '<span><b class="lat">' + s.pages + '</b> صفحة</span><span><b class="lat">' + (off ? off.q.length : 0) + '</b> رسمي</span><span><b class="lat">' + (pro ? pro.q.length : 0) + '</b> مقترح</span></span>' +
       '<span class="pbar"><i style="width:' + pct(s.read, s.pages) + '%"></i></span><span class="pl">الدروس <b class="lat">' + s.read + '/' + s.pages + '</b> · الكيسيام <b class="lat">' + s.qa + '/' + s.qn + '</b>' + (s.qa ? ' · صحيح <b class="lat">' + pct(s.qok, s.qa) + '%</b>' : '') + '</span></span></a>';
   }).join('');
-  const nOff = Object.keys(ITEMS).filter((k) => inS(k) && ITEMS[k].set.key === 'official').length, nPro = Object.keys(ITEMS).filter(inS).length - nOff;
+  const nOff = Object.keys(ITEMS).filter((k) => inS(k) && ITEMS[k].set.key === 'official' && !isOpen(k)).length, nPro = Object.keys(ITEMS).filter((k) => inS(k) && ITEMS[k].set.key !== 'official').length;
   const first = (me.name || '').split(' ')[0];
   const nw = wrongKeys().length, nf = favKeys().length + favPages().length, nd = dueKeys().length, lastEx = prog.hist[0];
   VIEW.innerHTML =
@@ -814,9 +814,9 @@ function qscreen(ctx) {
   if (textMode) {
     qText(key).then((T) => {
       if (rid !== renderId) return;
-      if (!T) { $('#qbody').innerHTML = fig(q.q, 'qimg zoomable', '9 / 4'); hydrate(); return; }
+      if (!T) { $('#qbody').innerHTML = fig(q.q, 'qimg zoomable', '9 / 4') + letterRow(q, sel, r, locked); const sb0 = $('#sbody'); if (sb0) sb0.innerHTML = fig(q.s, 'simg zoomable', '9 / 3'); hydrate(); return; }
       $('#qbody').innerHTML = '<div class="qtext">' + (T.en ? '<p class="stem" dir="ltr">' + fmt(T.en) + '</p>' : '') + (T.ar ? '<p class="stem sa" dir="rtl">' + fmt(T.ar) + '</p>' : '') + (T.fig || '') + '</div>' + optRows(key, q, T, sel, r, locked);
-      const sb = $('#sbody'); if (sb) sb.innerHTML = '<div class="solt">' + fmt(T.s) + '</div>';
+      const sb = $('#sbody'); if (sb) sb.innerHTML = T.s ? '<div class="solt">' + fmt(T.s) + '</div>' : (q.s && q.s !== q.q ? fig(q.s, 'simg zoomable', '9 / 3') : '');
       hydrate();
     }).catch(() => { if (rid === renderId) { $('#qbody').innerHTML = fig(q.q, 'qimg zoomable', '9 / 4') + letterRow(q, sel, r, locked); hydrate(); } });
   }

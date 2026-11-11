@@ -2,8 +2,8 @@
 import {
   watchUser, signIn, signOutUser, isAdminUser, listRequests, listAllowed,
   approve, reject, removeAllowed, addAllowed, authAgeHours, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, loadSubjects, saveSubjects, DEFAULT_SUBJECTS, configMissing
-} from './firebase.js?v=38';
-import { mountEditor } from './editor.js?v=38';
+} from './firebase.js?v=40';
+import { mountEditor } from './editor.js?v=40';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const box = $('#box');

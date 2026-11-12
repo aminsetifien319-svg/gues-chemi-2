@@ -2,14 +2,15 @@
 import {
   watchUser, signIn, signOutUser, isAdminUser, listRequests, listAllowed,
   approve, reject, removeAllowed, addAllowed, authAgeHours, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, loadSubjects, saveSubjects, DEFAULT_SUBJECTS, configMissing
-} from './firebase.js?v=42';
-import { mountEditor } from './editor.js?v=42';
+} from './firebase.js?v=43';
+import { mountEditor } from './editor.js?v=43';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const box = $('#box');
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 let me = null, note = '', busy = false, edMounted = false;
+const NEWTXT = /^x[xt]\d+_[0-9a-f]{10}$/;   // معرّفات النص الجديدة (مشتقة من المحتوى)
 
 function gate(inner) { box.innerHTML = '<div class="gate" style="min-height:60vh"><div class="card">' + inner + '</div></div>'; }
 
@@ -90,7 +91,20 @@ async function refresh() {
       if (m.chapters.length) TOT = { pages: m.chapters.reduce((a, c) => a + c.sections.reduce((b, s) => b + s.pages.length, 0) + c.revision.length, 0), qs: m.chapters.reduce((a, c) => a + c.qcm.reduce((b, s) => b + s.q.length, 0), 0) };
     } catch (e) {}
   }
+  let status = '';
+  try {
+    const SL = await loadSubjects();
+    const rows = await Promise.all(SL.map(async (x) => { let m = null; try { m = await loadManifest(x.doc); } catch (e) {} return [x, m]; }));
+    status = rows.map(([x, m]) => {
+      if (!m || !m.chapters) return '<tr><td>' + esc(x.ar || x.key) + '</td><td colspan="2" class="koc">غير موجود على الخادم</td></tr>';
+      const tx = m.chapters.filter((c) => c.text);
+      const fresh = tx.filter((c) => NEWTXT.test(c.textBase || c.text)).length;
+      const ok = tx.length && fresh === tx.length;
+      return '<tr><td>' + esc(x.ar || x.key) + '</td><td class="lat">' + esc(m.build || '—') + '</td><td class="' + (ok ? 'okc' : 'koc') + '">' + (ok ? '✓ النص المصحّح' : '✗ نص قديم (' + fresh + '/' + tx.length + ')') + '</td></tr>';
+    }).join('');
+  } catch (e) {}
   box.innerHTML =
+    (status ? '<div class="card"><h2>حالة المحتوى على الخادم <small>Live content</small></h2><div class="tscroll"><table class="ptab"><thead><tr><th>المادة</th><th>نسخة المحتوى</th><th>النص المكتوب</th></tr></thead><tbody>' + status + '</tbody></table></div><p class="small">إن ظهر «✗ نص قديم» فالمادة لم تُرفع بالملفات الجديدة بعد.</p></div>' : '') +
     '<div class="card"><h2>طلبات الوصول <small>' + req.length + ' pending</small></h2>' +
     (req.length ? '<ul class="list" id="reqs">' + req.map((r) => li(r, 'req')).join('') + '</ul>' : '<p class="small">لا توجد طلبات الآن.</p>') + '</div>' +
     '<div class="card"><h2>الطلبة المقبولون <small>' + allowed.length + ' students</small></h2>' +
@@ -123,6 +137,9 @@ async function upload(files) {
     if (packs.length && packs.every((p) => p.patch)) return uploadPatch(packs);
     throw new Error('لم تختر الملف manifest.json.');
   }
+  // رفض ملفات المحتوى القديمة (قبل التصحيح) حتى لا تُرفع بالخطأ
+  const oldTx = manifest.chapters.filter((c) => c.text && !NEWTXT.test(c.text));
+  if (oldTx.length || !manifest.build) throw new Error('هذه ملفات محتوى قديمة (قبل التصحيح). احذف المجلدات والملفات القديمة، ثم فكّ ضغط الملف الجديد الذي ينتهي اسمه بـ ‎-1311.zip‎ واختر ملفاته.');
   // تحقق أن كل صور الفهرس موجودة في الحزم المختارة (أو مرفوعة سابقاً)
   const need = new Set();
   manifest.overview.forEach((p) => need.add(p.img));
@@ -162,6 +179,9 @@ async function upload(files) {
   let cur = null; try { cur = await loadManifest(docId); } catch (e) {}
   if (cur) keepEdits(manifest, cur);
   await uploadManifest(manifest, docId);
+  let verified = false;
+  try { const back = await loadManifest(docId); verified = !!back && back.build === manifest.build && manifest.chapters.every((c) => { const b = back.chapters.find((x) => x.id === c.id); return b && (b.textBase || b.text) === (c.textBase || c.text); }); } catch (e) {}
+  if (!verified) throw new Error('حُفظ الفهرس لكن التحقق من الخادم فشل. أعد الضغط على «رفع المحتوى».');
   if (sub) {   // سجل المواد: الكيمياء العامة + هذه المادة
     let L = []; try { L = await loadSubjects(); } catch (e) { L = DEFAULT_SUBJECTS.slice(); }
     if (!L.some((x) => x.key === 'gen')) L.unshift(DEFAULT_SUBJECTS[0]);
@@ -170,7 +190,7 @@ async function upload(files) {
     await saveSubjects(L);
   }
   TOT = null;
-  return { sub: sub ? (sub.ar || sub.key) : '', sent: sent, skipped: skipped, total: ids.length, ch: manifest.chapters.length };
+  return { sub: sub ? (sub.ar || sub.key) : '', sent: sent, skipped: skipped, total: ids.length, ch: manifest.chapters.length, build: manifest.build };
 }
 // لا نفقد تعديلات المحرّر ولا البطاقات عند إعادة رفع نفس المحتوى
 function keepEdits(nm, cur) {
@@ -246,8 +266,9 @@ document.addEventListener('click', async (e) => {
     busy = true; t.disabled = true; msg.className = ''; msg.textContent = 'جارٍ قراءة الملفات… لا تغلق الصفحة.';
     try {
       const r = await upload(files);
-      msg.className = 'okmsg'; msg.textContent = r.patch ? '✓ اكتمل: أضيفت بطاقات المراجعة إلى ' + r.ch + ' شابيطرات (' + r.total + ' ملفات).' : '✓ اكتمل' + (r.sub ? ' (' + r.sub + ')' : '') + ': ' + r.ch + ' شابيطرات، ' + r.total + ' صورة (رُفع ' + r.sent + '، موجود مسبقاً ' + r.skipped + ').';
+      msg.className = 'okmsg'; msg.textContent = r.patch ? '✓ اكتمل: أضيفت بطاقات المراجعة إلى ' + r.ch + ' شابيطرات (' + r.total + ' ملفات).' : '✓ اكتمل' + (r.sub ? ' (' + r.sub + ')' : '') + ': ' + r.ch + ' شابيطرات، ' + r.total + ' صورة (رُفع ' + r.sent + '، موجود مسبقاً ' + r.skipped + '). ✓ تم التحقق من الخادم: النص المصحّح منشور (نسخة ' + r.build + ').';
       if (edMounted) mountEditor($('#ed'));
+      note = msg.textContent; busy = false; try { await refresh(); } catch (e2) {} return;
     } catch (err) { msg.className = 'err'; msg.textContent = (err && err.message) || String(err); }
     busy = false; t.disabled = false; return;
   }

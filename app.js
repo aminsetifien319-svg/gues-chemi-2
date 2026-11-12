@@ -2,9 +2,9 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
-} from './firebase.js?v=41';
-import { fmt, typeset } from './rich.js?v=41';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=41';
+} from './firebase.js?v=42';
+import { fmt, typeset } from './rich.js?v=42';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=42';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -205,7 +205,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 41;
+const APP_V = 42;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -456,7 +456,7 @@ function vidBox(ch, p) {
   if (!ok.length) return '';
   const yts = ok.filter((v) => v.yt), drv = ok.filter((v) => !v.yt);
   return '<section class="vids">' + (yts.length > 1 ? ytList(yts) : yts.map(ytBox).join('')) + drv.map((v) => '<div class="vid">' + drvFrame(v) + '' +
-    '<p class="vbar"><span>🎬 ' + esc(v.t || 'فيديو الدرس') + '</span><a href="https://drive.google.com/file/d/' + v.id + '/view" target="_blank" rel="noopener">افتح في Google Drive ↗</a><button type="button" class="btn sm" data-vfs>⛶ ملء الشاشة</button></p>' +
+    '<p class="vbar"><span>🎬 ' + esc(v.t || 'فيديو الدرس') + '</span><button type="button" class="btn sm" data-vfs>⛶ ملء الشاشة</button></p>' +
     '<p class="vhint">إن لم يظهر الفيديو: افتح الموقع في Chrome بنفس حساب Gmail المقبول، أو اضغط «افتح في Google Drive».</p></div>').join('') + '</section>';
 }
 // عدة فيديوهات يوتيوب لنفس الصفحة: مشغّل واحد + قائمة أجزاء، وينتقل للجزء التالي تلقائياً
@@ -474,7 +474,7 @@ function dock(r) {
     const yts = L.filter((v) => v.yt), drv = L.filter((v) => !v.yt);
     DOCK.className = 'wrap reader vdock' + (dockMini() ? ' mini' : '');
     DOCK.style.setProperty('--c', 'var(--c' + ch.id + ')');
-    DOCK.innerHTML = (yts.length ? ytList(yts, { mini: 1 }) : '') + drv.map((v) => '<div class="vid">' + drvFrame(v) + '<p class="vbar"><span>🎬 ' + esc(v.t || 'فيديو') + '</span><a href="https://drive.google.com/file/d/' + v.id + '/view" target="_blank" rel="noopener">افتح في Google Drive ↗</a><button type="button" class="btn sm" data-vfs>⛶</button></p></div>').join('');
+    DOCK.innerHTML = (yts.length ? ytList(yts, { mini: 1 }) : '') + drv.map((v) => '<div class="vid">' + drvFrame(v) + '<p class="vbar"><span>🎬 ' + esc(v.t || 'فيديو') + '</span><button type="button" class="btn sm" data-vfs>⛶</button></p></div>').join('');
   }
   DOCK.hidden = false;
 }
@@ -612,9 +612,13 @@ function drvFrame(v) {
     '<span class="dplay" aria-hidden="true"></span></button></div>';
 }
 document.addEventListener('error', (e) => { const t = e.target; if (t && t.matches && t.matches('.dposter img')) t.remove(); }, true);
+document.addEventListener('contextmenu', (e) => { if (e.target.closest && e.target.closest('.drv')) e.preventDefault(); });
 function drvPlay(fr) {
   if (!fr || fr.querySelector('iframe')) return;
-  fr.innerHTML = '<iframe src="https://drive.google.com/file/d/' + encodeURIComponent(fr.dataset.drv) + '/preview" title="' + esc(fr.dataset.t || '') + '" allow="autoplay" referrerpolicy="strict-origin-when-cross-origin"></iframe>';
+  // sandbox without allow-popups / allow-top-navigation: Drive's "open in new window" button cannot open the file outside the site
+  fr.innerHTML = '<iframe src="https://drive.google.com/file/d/' + encodeURIComponent(fr.dataset.drv) + '/preview" title="' + esc(fr.dataset.t || '') + '" allow="autoplay" sandbox="allow-scripts allow-same-origin allow-presentation" referrerpolicy="strict-origin-when-cross-origin"></iframe>' +
+    '<span class="dshield" aria-hidden="true"></span><i class="wm dwm"></i>';
+  fr.querySelector('.dwm').style.backgroundImage = watermark();
   fr.classList.add('on');
 }
 const isCov = (ch) => ch && ch.art === 'cover' && ch.cover;

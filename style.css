@@ -996,3 +996,7 @@ html[data-theme="dark"] .yrs.nokey{background:#3a2c10;color:#f3cf86}
   .hero.hcov .hero-bg.ok{opacity:.8}
 }
 .lesson .bi>*{min-width:0}
+
+/* Drive videos: cover Drive's pop-out button and keep the viewer's watermark over the video */
+.drv .dshield{position:absolute;top:0;right:0;width:72px;height:64px;z-index:3;background:transparent}
+.drv .dwm{position:absolute;inset:0;pointer-events:none;z-index:2;background-repeat:repeat;opacity:.55}

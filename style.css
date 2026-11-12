@@ -995,3 +995,4 @@ html[data-theme="dark"] .yrs.nokey{background:#3a2c10;color:#f3cf86}
     -webkit-mask-image:linear-gradient(to right,transparent 0,#000 30%,#000 62%,transparent 100%);mask-image:linear-gradient(to right,transparent 0,#000 30%,#000 62%,transparent 100%)}
   .hero.hcov .hero-bg.ok{opacity:.8}
 }
+.lesson .bi>*{min-width:0}

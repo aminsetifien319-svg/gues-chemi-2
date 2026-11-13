@@ -2,8 +2,8 @@
 import {
   watchUser, signIn, signOutUser, isAdminUser, listRequests, listAllowed,
   approve, reject, removeAllowed, addAllowed, authAgeHours, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, loadSubjects, saveSubjects, DEFAULT_SUBJECTS, configMissing
-} from './firebase.js?v=43';
-import { mountEditor } from './editor.js?v=43';
+} from './firebase.js?v=44';
+import { mountEditor } from './editor.js?v=44';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const box = $('#box');
@@ -139,7 +139,7 @@ async function upload(files) {
   }
   // رفض ملفات المحتوى القديمة (قبل التصحيح) حتى لا تُرفع بالخطأ
   const oldTx = manifest.chapters.filter((c) => c.text && !NEWTXT.test(c.text));
-  if (oldTx.length || !manifest.build) throw new Error('هذه ملفات محتوى قديمة (قبل التصحيح). احذف المجلدات والملفات القديمة، ثم فكّ ضغط الملف الجديد الذي ينتهي اسمه بـ ‎-1311.zip‎ واختر ملفاته.');
+  if (oldTx.length || !manifest.build) throw new Error('هذه ملفات محتوى قديمة (قبل التصحيح). احذف المجلدات والملفات القديمة، ثم فكّ ضغط الملف الجديد الأحدث (ينتهي اسمه بـ ‎-1311b.zip‎) واختر ملفاته.');
   // تحقق أن كل صور الفهرس موجودة في الحزم المختارة (أو مرفوعة سابقاً)
   const need = new Set();
   manifest.overview.forEach((p) => need.add(p.img));

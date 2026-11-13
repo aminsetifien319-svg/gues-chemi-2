@@ -1,8 +1,8 @@
 // محرّر المحتوى (للمشرف فقط): تصحيح الدروس والأسئلة والبطاقات مباشرة من لوحة الإدارة.
 // كل حفظ يُنشئ نسخة جديدة من ملف النص (معرّف جديد) ثم يحدّث الفهرس، فيرى الطلبة التعديل فوراً،
 // وتبقى النسخة الأصلية محفوظة للرجوع إليها.
-import { getImage, uploadImage, loadManifest, uploadManifest, loadSubjects } from './firebase.js?v=43';
-import { fmt, typeset } from './rich.js?v=43';
+import { getImage, uploadImage, loadManifest, uploadManifest, loadSubjects } from './firebase.js?v=44';
+import { fmt, typeset } from './rich.js?v=44';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));

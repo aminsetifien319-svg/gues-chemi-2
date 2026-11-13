@@ -2,9 +2,9 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
-} from './firebase.js?v=43';
-import { fmt, typeset } from './rich.js?v=43';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=43';
+} from './firebase.js?v=44';
+import { fmt, typeset } from './rich.js?v=44';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=44';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -205,7 +205,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 43;
+const APP_V = 44;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -751,6 +751,7 @@ function page(ch, i) {
     if (rid !== renderId || !T) return;
     const P = T.pages[p.n];
     const at = $('[data-artitle]'); if (at && P && P.ar) at.textContent = P.ar;
+    if (viewMode !== 'orig' && P && !(P.html || '').trim()) { $('#lbody').innerHTML = origFigs(ch, p); hydrate($('#lbody')); return; }   // صفحة بلا نص (كيسيام، ملخص، خريطة ذهنية): الصفحة الأصلية
     if (viewMode !== 'orig' && P) {
       $('#lbody').innerHTML = '<article class="lesson" style="--c:var(--c' + ch.id + ')"><i class="wm tw"></i>' + fmt(P.html) + (ch.build ? '<p class="cbuild lat">' + esc(ch.build) + '</p>' : '') + '</article>';
       hydrate($('#lbody'));

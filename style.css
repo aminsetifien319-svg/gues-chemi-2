@@ -1083,3 +1083,11 @@ html[data-theme="dark"] .lesson .call.note{--k2:#a99cff}
 .lesson .bx>.bd>.bi+.bi{border-top:1px dashed var(--line2);margin-top:6px;padding-top:8px}
 .lesson .bx>.bd>.tw{margin:10px 0}
 @media (max-width:760px){.lesson .fcap{flex-direction:column;gap:2px}.lesson .call{padding:9px 11px 3px}}
+
+/* لغة أسئلة الكيسيام: تُخفى لغة فقط إذا وُجد مقابلها باللغة الأخرى */
+.qlangbar{display:flex;justify-content:center;margin:-2px 0 12px}
+.qlangbar[hidden]{display:none}
+.qcard[data-qlang=en] .qtext.pair .stem.sa,.qcard[data-qlang=en] .ot.pair .oa,.qcard[data-qlang=en] .solt .bi.pair>.ar{display:none}
+.qcard[data-qlang=ar] .qtext.pair .stem[dir=ltr],.qcard[data-qlang=ar] .ot.pair .oe,.qcard[data-qlang=ar] .solt .bi.pair>.en{display:none}
+.qcard[data-qlang=ar] .ot.pair .oa{font-size:15px;color:var(--ink)}
+.qcard[data-qlang=ar] .qtext.pair .stem.sa{font-size:17px;color:var(--ink)}

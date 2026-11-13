@@ -2,9 +2,9 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
-} from './firebase.js?v=46';
-import { fmt, typeset } from './rich.js?v=46';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=46';
+} from './firebase.js?v=47';
+import { fmt, typeset } from './rich.js?v=47';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=47';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -29,6 +29,8 @@ let viewMode = 'text';
 try { viewMode = localStorage.getItem('gueschemi.view') === 'orig' ? 'orig' : 'text'; } catch (e) {}
 let langMode = 'both';   // لغة الدرس المكتوب: الاثنان · English · العربية
 try { const l = localStorage.getItem('gueschemi.lang'); if (l === 'en' || l === 'ar') langMode = l; } catch (e) {}
+let qLang = 'both';      // لغة أسئلة الكيسيام: الاثنان · English · العربية (مستقلة عن لغة الدرس)
+try { const l = localStorage.getItem('gueschemi.qlang'); if (l === 'en' || l === 'ar') qLang = l; } catch (e) {}
 
 /* =================================================================
    التقدّم: محفوظ في المتصفح + في حساب الطالب
@@ -207,7 +209,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 46;
+const APP_V = 47;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -648,6 +650,18 @@ function prefetch(id) { if (id) getImage(id).catch(() => {}); }
 const star = (id, label) => '<button type="button" class="star' + (isFav(id) ? ' on' : '') + '" data-fav="' + esc(id) + '" aria-pressed="' + isFav(id) + '" title="أضف إلى المفضلة">' + (isFav(id) ? '★' : '☆') + (label ? '<span>' + (isFav(id) ? 'في المفضلة' : 'أضف للمفضلة') + '</span>' : '') + '</button>';
 const modeSwitch = (what) => '<div class="seg" role="group" aria-label="طريقة العرض"><button type="button" data-mode="text" class="' + (viewMode === 'text' ? 'on' : '') + '">' + (what === 'q' ? 'السؤال مكتوباً' : 'الدرس مكتوباً') + '</button><button type="button" data-mode="orig" class="' + (viewMode === 'orig' ? 'on' : '') + '">' + (what === 'q' ? 'صورة السؤال' : 'الصفحة الأصلية') + '</button></div>';
 const langSwitch = () => '<div class="seg lang" role="group" aria-label="لغة الدرس"><button type="button" data-lang="both" class="' + (langMode === 'both' ? 'on' : '') + '">الاثنان</button><button type="button" data-lang="en" class="lat' + (langMode === 'en' ? ' on' : '') + '">English</button><button type="button" data-lang="ar" class="' + (langMode === 'ar' ? 'on' : '') + '">العربية</button></div>';
+const qLangSwitch = () => '<div class="seg lang qlang" role="group" aria-label="لغة السؤال"><button type="button" data-qlang="both" class="' + (qLang === 'both' ? 'on' : '') + '">الاثنان</button><button type="button" data-qlang="en" class="lat' + (qLang === 'en' ? ' on' : '') + '">English</button><button type="button" data-qlang="ar" class="' + (qLang === 'ar' ? 'on' : '') + '">العربية</button></div>';
+// يعلّم كل جزء له اللغتان معاً، فلا يُخفى إلا ما له مقابل باللغة الأخرى (لا يختفي نص أبداً)
+const hasTxt = (el) => !!el && (el.textContent.trim() !== '' || !!el.querySelector('img,table,svg'));
+function qLangMark(root) {
+  if (!root) return false;
+  let any = false;
+  const qt = $('.qtext', root);
+  if (qt) { const pr = hasTxt($('.stem[dir=ltr]', qt)) && hasTxt($('.stem.sa', qt)); qt.classList.toggle('pair', pr); any = any || pr; }
+  $$('.orow .ot', root).forEach((o) => { const pr = hasTxt($('.oe', o)) && hasTxt($('.oa', o)); o.classList.toggle('pair', pr); any = any || pr; });
+  $$('.solt .bi', root).forEach((b) => { const pr = hasTxt($(':scope > .en', b)) && hasTxt($(':scope > .ar', b)); b.classList.toggle('pair', pr); any = any || pr; });
+  return any;
+}
 // قائمة «في هذه الصفحة» + تمارين الجزء
 function lessonExtras(ch, p) {
   const body = $('#lbody'); if (!body) return;
@@ -831,7 +845,7 @@ function qscreen(ctx) {
   const textMode = !!it.ch.text;   // الأسئلة دائماً مكتوبة (الصورة تُستعمل فقط إن تعذّر النص)
   VIEW.innerHTML = '<div class="wrap quiz' + (live ? ' live' : '') + '" style="--c:var(--c' + (mode === 'practice' ? it.ch.id : 0) + ',var(--cyan2))">' + ctx.top +
     '<div class="qchips" aria-label="الأسئلة">' + chips + '</div>' +
-    '<article class="qcard"><i class="wm tw"></i><div class="qtop"><span class="qn">السؤال <b class="lat">' + (i + 1) + '</b> من <b class="lat">' + keys.length + '</b></span>' + src + years + (ctx.qtimer || '') + star(key) + '</div>' +
+    '<article class="qcard" data-qlang="' + qLang + '"><i class="wm tw"></i><div class="qtop"><span class="qn">السؤال <b class="lat">' + (i + 1) + '</b> من <b class="lat">' + keys.length + '</b></span>' + src + years + (ctx.qtimer || '') + star(key) + '</div>' + (textMode ? '<div class="qlangbar" hidden>' + qLangSwitch() + '</div>' : '') +
     '<div id="qbody">' + (textMode ? loading : fig(q.q, 'qimg zoomable', '9 / 4') + '<p class="zhint">اضغط على السؤال لتكبيره</p>') + '</div>' +
     '<div class="opick"><p>' + (r ? 'إجابتك:' : live ? 'اختر الإجابة أو الإجابات (تُحفظ تلقائياً، والتصحيح بعد التسليم):' : 'اختر الإجابة أو الإجابات الصحيحة (قد تكون أكثر من واحدة):') + '</p>' + (textMode ? '' : letterRow(q, sel, r, locked)) + action + '</div>' +
     verdict + (r && !open ? '<div class="sol"><p class="solh">الحل والشرح</p><div id="sbody">' + (textMode ? loading : fig(q.s, 'simg zoomable', '9 / 3')) + '</div></div>' : '') +
@@ -844,6 +858,7 @@ function qscreen(ctx) {
       if (!T) { $('#qbody').innerHTML = fig(q.q, 'qimg zoomable', '9 / 4') + letterRow(q, sel, r, locked); const sb0 = $('#sbody'); if (sb0) sb0.innerHTML = fig(q.s, 'simg zoomable', '9 / 3'); hydrate(); return; }
       $('#qbody').innerHTML = '<div class="qtext">' + (T.en ? '<p class="stem" dir="ltr">' + fmt(T.en) + '</p>' : '') + (T.ar ? '<p class="stem sa" dir="rtl">' + fmt(T.ar) + '</p>' : '') + (T.fig || '') + '</div>' + optRows(key, q, T, sel, r, locked);
       const sb = $('#sbody'); if (sb) sb.innerHTML = T.s ? '<div class="solt">' + fmt(T.s) + '</div>' : (q.s && q.s !== q.q ? fig(q.s, 'simg zoomable', '9 / 3') : '');
+      const bar = $('.qlangbar'); if (bar) bar.hidden = !qLangMark($('.qcard'));
       hydrate();
     }).catch(() => { if (rid === renderId) { $('#qbody').innerHTML = fig(q.q, 'qimg zoomable', '9 / 4') + letterRow(q, sel, r, locked); hydrate(); } });
   }
@@ -1398,6 +1413,8 @@ document.addEventListener('click', async (e) => {
   if (t.closest('#menuBtn')) { SIDE.classList.contains('show') ? closeSide() : openSide(); return; }
   if (t.closest('#searchBtn')) { go('#/search'); return; }
   if (t.closest('#scrim')) { closeSide(); return; }
+  const qlg = t.closest('button[data-qlang]');
+  if (qlg) { qLang = qlg.dataset.qlang; try { localStorage.setItem('gueschemi.qlang', qLang); } catch (e2) {} $$('button[data-qlang]').forEach((b) => b.classList.toggle('on', b.dataset.qlang === qLang)); $$('.qcard').forEach((a) => a.setAttribute('data-qlang', qLang)); return; }
   const lg = t.closest('button[data-lang]');
   if (lg) { langMode = lg.dataset.lang; try { localStorage.setItem('gueschemi.lang', langMode); } catch (e2) {} $$('button[data-lang]').forEach((b) => b.classList.toggle('on', b.dataset.lang === langMode)); $$('.lesson').forEach((a) => a.setAttribute('data-lang', langMode)); return; }
   const gt = t.closest('[data-goto]');

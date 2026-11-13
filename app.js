@@ -2,9 +2,9 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
-} from './firebase.js?v=44';
-import { fmt, typeset } from './rich.js?v=44';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=44';
+} from './firebase.js?v=46';
+import { fmt, typeset } from './rich.js?v=46';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=46';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -27,6 +27,8 @@ let CUR = null, cloud = 'off', pushTimer = 0, tick = 0, installEvt = null, rende
 const TXT = {};
 let viewMode = 'text';
 try { viewMode = localStorage.getItem('gueschemi.view') === 'orig' ? 'orig' : 'text'; } catch (e) {}
+let langMode = 'both';   // لغة الدرس المكتوب: الاثنان · English · العربية
+try { const l = localStorage.getItem('gueschemi.lang'); if (l === 'en' || l === 'ar') langMode = l; } catch (e) {}
 
 /* =================================================================
    التقدّم: محفوظ في المتصفح + في حساب الطالب
@@ -205,7 +207,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 44;
+const APP_V = 46;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -307,8 +309,8 @@ function start(remote) {
   SUBJ.forEach((sj) => { const MM = MS[sj.key]; const FIX = (MM.fix && MM.fix.ans) || {}; MM.chapters.forEach((ch) => {   // كل المواد معاً (وتصحيحات الأجوبة من المحرّر)
     ch.sub = sj.key;
     const list = [];
-    ch.sections.forEach((s) => s.pages.forEach((p) => list.push({ img: p.img, imgs: p.imgs, n: p.n, t: p.t, sec: s.en, secAr: s.ar, rev: false })));
-    ch.revision.forEach((p) => list.push({ img: p.img, imgs: p.imgs, n: p.n, t: p.t, sec: 'Revision', secAr: p.ar || 'المراجعة', rev: true }));
+    ch.sections.forEach((s) => s.pages.forEach((p) => list.push({ img: p.img, imgs: p.imgs, n: p.n, t: p.t, qs: p.qs, sec: s.en, secAr: s.ar, rev: false })));
+    ch.revision.forEach((p) => list.push({ img: p.img, imgs: p.imgs, n: p.n, t: p.t, qs: p.qs, sec: 'Revision', secAr: p.ar || 'المراجعة', rev: true }));
     FLOW[ch.id] = list;
     ch.qcm.forEach((set) => {
       const s = sk(ch.id, set.key); SETKEYS[s] = [];
@@ -645,6 +647,25 @@ function hydrate(root) {
 function prefetch(id) { if (id) getImage(id).catch(() => {}); }
 const star = (id, label) => '<button type="button" class="star' + (isFav(id) ? ' on' : '') + '" data-fav="' + esc(id) + '" aria-pressed="' + isFav(id) + '" title="أضف إلى المفضلة">' + (isFav(id) ? '★' : '☆') + (label ? '<span>' + (isFav(id) ? 'في المفضلة' : 'أضف للمفضلة') + '</span>' : '') + '</button>';
 const modeSwitch = (what) => '<div class="seg" role="group" aria-label="طريقة العرض"><button type="button" data-mode="text" class="' + (viewMode === 'text' ? 'on' : '') + '">' + (what === 'q' ? 'السؤال مكتوباً' : 'الدرس مكتوباً') + '</button><button type="button" data-mode="orig" class="' + (viewMode === 'orig' ? 'on' : '') + '">' + (what === 'q' ? 'صورة السؤال' : 'الصفحة الأصلية') + '</button></div>';
+const langSwitch = () => '<div class="seg lang" role="group" aria-label="لغة الدرس"><button type="button" data-lang="both" class="' + (langMode === 'both' ? 'on' : '') + '">الاثنان</button><button type="button" data-lang="en" class="lat' + (langMode === 'en' ? ' on' : '') + '">English</button><button type="button" data-lang="ar" class="' + (langMode === 'ar' ? 'on' : '') + '">العربية</button></div>';
+// قائمة «في هذه الصفحة» + تمارين الجزء
+function lessonExtras(ch, p) {
+  const body = $('#lbody'); if (!body) return;
+  if (!$('.bi, .mono[dir=rtl], .bx h3 .ar', body)) {   // درس بلغة واحدة: لا معنى لزر اللغة
+    const sw = $('.seg.lang'); if (sw) sw.hidden = true;
+    const art = $('.lesson', body); if (art) art.setAttribute('data-lang', 'both');
+  }
+  const hs = $$('.lesson .bx > h3', body);
+  if (hs.length >= 3) {
+    const items = hs.map((h, i) => { h.id = 'h' + i; const en = h.querySelector('.en'), ar = h.querySelector('.ar'); return '<li><a href="#" data-goto="h' + i + '">' + (en ? '<span class="lat" dir="ltr">' + esc(en.textContent) + '</span>' : '') + (ar ? '<span dir="rtl">' + esc(ar.textContent) + '</span>' : '') + '</a></li>'; }).join('');
+    body.insertAdjacentHTML('afterbegin', '<nav class="ltoc"><b>في هذه الصفحة <small class="lat">' + hs.length + '</small></b><ol>' + items + '</ol></nav>');
+  }
+  const qs = (p.qs || []).filter((k) => ITEMS[k]);
+  if (qs.length) {
+    const chips = qs.map((k) => { const it = ITEMS[k], r = res(k); return '<a class="pq' + (r ? (r.ok ? ' ok' : ' ko') : '') + '" href="#/c/' + it.ch.id + '/q/' + it.set.key + '/' + (it.i + 1) + '"><b class="lat">' + it.q.n + '</b><small>' + KIND_AR[it.set.key] + '</small></a>'; }).join('');
+    body.insertAdjacentHTML('beforeend', '<aside class="prac"><h4>✎ تدرّب على هذا الجزء <small>' + qs.length + ' ' + (qs.length > 2 && qs.length < 11 ? 'أسئلة' : 'سؤال') + '</small></h4><div class="pqs">' + chips + '</div></aside>');
+  }
+}
 const loading = '<div class="loadtx"><span class="sk"></span></div>';
 const crumbs = (items) => '<nav class="crumb"><a href="#/">الرئيسية</a>' + items.map((x) => '<span>›</span>' + (x[1] ? '<a href="' + x[1] + '">' + x[0] + '</a>' : '<b>' + x[0] + '</b>')).join('') + '</nav>';
 
@@ -743,7 +764,7 @@ function page(ch, i) {
     '<header class="rhead" style="--c:var(--c' + ch.id + ')">' + (isCov(ch) ? bgDiv(ch.cover, 'rart rcov') : '<span class="rart">' + chArt(ch) + '</span>') + '<div><p class="kick"><span>' + esc(p.secAr) + '</span>' + (p.rev ? '' : '<span class="lat"> · ' + esc(p.sec) + '</span>') + '</p><h1 class="lat">' + esc(p.t) + '</h1><p class="artitle" dir="rtl" data-artitle></p></div>' +
     '<div class="rmeta">' + star('p' + p.n, true) + '<span class="lat" dir="ltr">' + k + ' / ' + secPages.length + '</span><span class="sep"></span><span>صفحة <b class="lat">' + (i + 1) + '</b> من <b class="lat">' + list.length + '</b></span></div></header>' +
     '<div class="rbar"><i style="width:' + pct(i + 1, list.length) + '%;background:var(--c' + ch.id + ')"></i></div>' +
-    '<div class="rtools">' + modeSwitch('p') + '</div>' +
+    '<div class="rtools">' + modeSwitch('p') + (viewMode !== 'orig' && ch.text ? langSwitch() : '') + '</div>' +
     vidBox(ch, p) + '<div class="lbody" id="lbody">' + (viewMode === 'orig' || !ch.text ? origFigs(ch, p) + '<p class="hint"><button type="button" class="btn sm" data-zoom>⤢ تكبير وملء الشاشة</button><span>على الهاتف: أدِر الشاشة أفقياً أو استعمل زر التكبير.</span></p>' : loading) + '</div>' +
     '<div class="pnav">' + nav(prev, 'prev') + endNext + '</div></div>';
   hydrate();
@@ -753,7 +774,8 @@ function page(ch, i) {
     const at = $('[data-artitle]'); if (at && P && P.ar) at.textContent = P.ar;
     if (viewMode !== 'orig' && P && !(P.html || '').trim()) { $('#lbody').innerHTML = origFigs(ch, p); hydrate($('#lbody')); return; }   // صفحة بلا نص (كيسيام، ملخص، خريطة ذهنية): الصفحة الأصلية
     if (viewMode !== 'orig' && P) {
-      $('#lbody').innerHTML = '<article class="lesson" style="--c:var(--c' + ch.id + ')"><i class="wm tw"></i>' + fmt(P.html) + (ch.build ? '<p class="cbuild lat">' + esc(ch.build) + '</p>' : '') + '</article>';
+      $('#lbody').innerHTML = '<article class="lesson" data-lang="' + langMode + '" style="--c:var(--c' + ch.id + ')"><i class="wm tw"></i>' + fmt(P.html) + (ch.build ? '<p class="cbuild lat">' + esc(ch.build) + '</p>' : '') + '</article>';
+      lessonExtras(ch, p);
       hydrate($('#lbody'));
     }
   }).catch(() => { if (rid === renderId && viewMode !== 'orig') { $('#lbody').innerHTML = origFigs(ch, p); hydrate(); } });
@@ -1376,6 +1398,10 @@ document.addEventListener('click', async (e) => {
   if (t.closest('#menuBtn')) { SIDE.classList.contains('show') ? closeSide() : openSide(); return; }
   if (t.closest('#searchBtn')) { go('#/search'); return; }
   if (t.closest('#scrim')) { closeSide(); return; }
+  const lg = t.closest('button[data-lang]');
+  if (lg) { langMode = lg.dataset.lang; try { localStorage.setItem('gueschemi.lang', langMode); } catch (e2) {} $$('button[data-lang]').forEach((b) => b.classList.toggle('on', b.dataset.lang === langMode)); $$('.lesson').forEach((a) => a.setAttribute('data-lang', langMode)); return; }
+  const gt = t.closest('[data-goto]');
+  if (gt) { e.preventDefault(); const el = document.getElementById(gt.dataset.goto); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   const md = t.closest('[data-mode]');
   if (md) { viewMode = md.dataset.mode; try { localStorage.setItem('gueschemi.view', viewMode); } catch (e2) {} const y = window.scrollY; router(); window.scrollTo(0, y); return; }
   const f = t.closest('[data-fav]');

@@ -7,7 +7,7 @@ import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache,
   doc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-import * as CFG from './firebase-config.js?v=48';
+import * as CFG from './firebase-config.js?v=50';
 const firebaseConfig = CFG.firebaseConfig;
 
 export const configMissing = !firebaseConfig.apiKey || String(firebaseConfig.apiKey).indexOf('PASTE') === 0;
@@ -32,6 +32,25 @@ if (!configMissing) {
 }
 
 const lower = (s) => String(s || '').trim().toLowerCase();
+
+/* ---------- السنة الدراسية: الأولى أو الثانية (كل سنة لها محتواها وطلبتها في مجموعات منفصلة) ---------- */
+const _yq = (() => { try { return new URLSearchParams(location.search).get('y'); } catch (e) { return null; } })();
+export const YEAR_EXPLICIT = _yq === '1' || _yq === '2';
+export const YEAR = (() => {
+  let y = 1;
+  try { if (YEAR_EXPLICIT) { y = +_yq; localStorage.setItem('gueschemi.year', String(y)); } else y = localStorage.getItem('gueschemi.year') === '2' ? 2 : 1; } catch (e) { y = _yq === '2' ? 2 : 1; }
+  return y;
+})();
+export const YEAR_AR = YEAR === 2 ? 'السنة الثانية' : 'السنة الأولى';
+export const YEAR_EN = YEAR === 2 ? '2nd-year' : '1st-year';
+// اسم المجموعة حسب السنة: السنة الأولى بدون لاحقة (كما كانت)، والثانية بلاحقة 2
+const C = (name, y) => ((y || YEAR) === 2 ? name + '2' : name);
+export function yearUrl(y) { return location.pathname + '?y=' + y + (location.hash || ''); }
+export function switchYear(y) { try { localStorage.setItem('gueschemi.year', String(y)); } catch (e) {} location.href = yearUrl(y); }
+// هل الحساب مقبول في سنة معيّنة؟ (يُستعمل لتوجيه الطالب تلقائياً لسنته)
+export async function hasYear(email, y) {
+  try { const s = await getDocFromServer(doc(db, C('allowed', y), email)); return s.exists(); } catch (e) { return false; }
+}
 
 /* ---------- الدخول ---------- */
 export function watchUser(cb) {
@@ -67,14 +86,14 @@ export function signOutUser() { return signOut(auth); }
 export async function getAccess(email) {
   const adm = await getDocFromServer(doc(db, 'admins', email)).catch(() => getDoc(doc(db, 'admins', email)));
   if (adm.exists()) return 'admin';
-  const al = await getDocFromServer(doc(db, 'allowed', email)).catch(() => getDoc(doc(db, 'allowed', email)));
+  const al = await getDocFromServer(doc(db, C('allowed'), email)).catch(() => getDoc(doc(db, C('allowed'), email)));
   if (al.exists()) return 'allowed';
-  const rq = await getDoc(doc(db, 'requests', email));
+  const rq = await getDoc(doc(db, C('requests'), email));
   return rq.exists() ? 'pending' : 'none';
 }
 
 export async function sendRequest(user) {
-  await setDoc(doc(db, 'requests', user.email), {
+  await setDoc(doc(db, C('requests'), user.email), {
     email: user.email,
     name: String(user.name || '').slice(0, 100),
     createdAt: serverTimestamp()
@@ -84,7 +103,7 @@ export async function sendRequest(user) {
 /* ---------- المحتوى ---------- */
 // الفهرس صغير ويُقرأ من الخادم دائماً حتى يظهر أي تحديث فوراً.
 export async function loadManifest(id) {
-  const ref = doc(db, 'content', id || 'manifest');
+  const ref = doc(db, C('content'), id || 'manifest');
   // من الخادم دائماً (مع محاولة ثانية)، ولا نرجع للنسخة المحفوظة إلا دون إنترنت.
   const s = await getDocFromServer(ref)
     .catch(() => new Promise((r) => setTimeout(r, 1500)).then(() => getDocFromServer(ref)))
@@ -96,7 +115,7 @@ export async function loadManifest(id) {
 // مراقبة الفهرس مباشرة: أي تعديل من المشرف يصل للطلبة دون إعادة فتح الموقع.
 export function watchManifest(cb, id) {
   try {
-    return onSnapshot(doc(db, 'content', id || 'manifest'), (s) => { if (s.exists() && !s.metadata.fromCache) { try { cb(JSON.parse(s.data().json)); } catch (e) {} } }, () => {});
+    return onSnapshot(doc(db, C('content'), id || 'manifest'), (s) => { if (s.exists() && !s.metadata.fromCache) { try { cb(JSON.parse(s.data().json)); } catch (e) {} } }, () => {});
   } catch (e) { return () => {}; }
 }
 
@@ -104,7 +123,7 @@ export function watchManifest(cb, id) {
 const memo = new Map();
 export function getImage(id) {
   if (memo.has(id)) return memo.get(id);
-  const ref = doc(db, 'content', 'img_' + id);
+  const ref = doc(db, C('content'), 'img_' + id);
   const p = getDocFromCache(ref).catch(() => getDoc(ref)).then((s) => {
     if (!s.exists()) throw new Error('missing image ' + id);
     return s.data().d;
@@ -116,12 +135,12 @@ export function getImage(id) {
 
 /* ---------- تقدّم الطالب (يتبعه على كل أجهزته) ---------- */
 export async function loadProgress(email) {
-  const s = await getDocFromServer(doc(db, 'progress', email));
+  const s = await getDocFromServer(doc(db, C('progress'), email));
   return s.exists() ? s.data().json : null;
 }
 
 export async function saveProgress(email, json) {
-  await setDoc(doc(db, 'progress', email), { json: json, updatedAt: serverTimestamp() });
+  await setDoc(doc(db, C('progress'), email), { json: json, updatedAt: serverTimestamp() });
 }
 
 /* ---------- الأجهزة (جهازان كحد أقصى لكل حساب) ---------- */
@@ -143,7 +162,7 @@ export async function resetDevices(email) { await deleteDoc(doc(db, 'devices', l
 
 /* ---------- الإدارة ---------- */
 export async function listProgress() {
-  const s = await getDocs(collection(db, 'progress'));
+  const s = await getDocs(collection(db, C('progress')));
   return s.docs.map((d) => {
     const x = d.data();
     return { email: d.id, json: x.json || '', at: x.updatedAt && x.updatedAt.toDate ? x.updatedAt.toDate() : null };
@@ -156,49 +175,50 @@ export async function isAdminUser(email) {
 }
 
 export async function listRequests() {
-  const s = await getDocs(collection(db, 'requests'));
+  const s = await getDocs(collection(db, C('requests')));
   return s.docs.map((d) => ({ email: d.id, name: d.data().name || '' }));
 }
 
 export async function listAllowed() {
-  const s = await getDocs(collection(db, 'allowed'));
+  const s = await getDocs(collection(db, C('allowed')));
   return s.docs.map((d) => ({ email: d.id, name: d.data().name || '' }));
 }
 
 export async function approve(email, name) {
   const b = writeBatch(db);
-  b.set(doc(db, 'allowed', lower(email)), { email: lower(email), name: name || '', approvedAt: serverTimestamp() });
-  b.delete(doc(db, 'requests', lower(email)));
+  b.set(doc(db, C('allowed'), lower(email)), { email: lower(email), name: name || '', approvedAt: serverTimestamp() });
+  b.delete(doc(db, C('requests'), lower(email)));
   await b.commit();
 }
 
-export async function reject(email) { await deleteDoc(doc(db, 'requests', lower(email))); }
+export async function reject(email) { await deleteDoc(doc(db, C('requests'), lower(email))); }
 
-export async function removeAllowed(email) { await deleteDoc(doc(db, 'allowed', lower(email))); }
+export async function removeAllowed(email) { await deleteDoc(doc(db, C('allowed'), lower(email))); }
 
 export async function addAllowed(email) {
-  await setDoc(doc(db, 'allowed', lower(email)), { email: lower(email), name: '', approvedAt: serverTimestamp() });
+  await setDoc(doc(db, C('allowed'), lower(email)), { email: lower(email), name: '', approvedAt: serverTimestamp() });
 }
 
 export async function uploadImage(id, data) {
-  await setDoc(doc(db, 'content', 'img_' + id), { d: data });
+  await setDoc(doc(db, C('content'), 'img_' + id), { d: data });
 }
 
 export async function uploadManifest(manifest, id) {
   const json = JSON.stringify(manifest);
   if (json.length > 900000) throw new Error('الفهرس كبير جداً.');
-  await setDoc(doc(db, 'content', id || 'manifest'), { json: json, updatedAt: serverTimestamp() });
+  await setDoc(doc(db, C('content'), id || 'manifest'), { json: json, updatedAt: serverTimestamp() });
 }
 
 /* ---------- المواد (الكيمياء العامة، العضوية، …) ---------- */
 export const DEFAULT_SUBJECTS = [{ key: 'gen', doc: 'manifest', en: 'General Chemistry', ar: 'الكيمياء العامة' }];
 export async function loadSubjects() {
-  const ref = doc(db, 'content', 'subjects');
+  const ref = doc(db, C('content'), 'subjects');
   let s = null;
   try { s = await getDocFromServer(ref); } catch (e) { try { s = await getDoc(ref); } catch (e2) { s = null; } }
-  if (!s || !s.exists()) return DEFAULT_SUBJECTS.slice();
-  try { const L = JSON.parse(s.data().json); return Array.isArray(L) && L.length ? L : DEFAULT_SUBJECTS.slice(); } catch (e) { return DEFAULT_SUBJECTS.slice(); }
+  if (!s || !s.exists()) return YEAR === 2 ? [] : DEFAULT_SUBJECTS.slice();
+  const DEF = YEAR === 2 ? [] : DEFAULT_SUBJECTS.slice();
+  try { const L = JSON.parse(s.data().json); return Array.isArray(L) && L.length ? L : DEF; } catch (e) { return DEF; }
 }
 export async function saveSubjects(list) {
-  await setDoc(doc(db, 'content', 'subjects'), { json: JSON.stringify(list), updatedAt: serverTimestamp() });
+  await setDoc(doc(db, C('content'), 'subjects'), { json: JSON.stringify(list), updatedAt: serverTimestamp() });
 }

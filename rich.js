@@ -18,8 +18,8 @@ function addScript(src) {
 }
 export function loadKatex() {
   if (KX) return KX;
-  const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = CDN + 'katex.min.css?v=47'; document.head.appendChild(l);
-  KX = addScript(CDN + 'katex.min.js?v=47').then(() => addScript(CDN + 'katex-mhchem.min.js?v=47')).then(() => addScript(CDN + 'katex-auto-render.min.js?v=47'));
+  const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = CDN + 'katex.min.css?v=48'; document.head.appendChild(l);
+  KX = addScript(CDN + 'katex.min.js?v=48').then(() => addScript(CDN + 'katex-mhchem.min.js?v=48')).then(() => addScript(CDN + 'katex-auto-render.min.js?v=48'));
   KX.catch(() => { KX = null; });
   return KX;
 }

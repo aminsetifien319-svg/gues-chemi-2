@@ -2,9 +2,9 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
-} from './firebase.js?v=47';
-import { fmt, typeset } from './rich.js?v=47';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=47';
+} from './firebase.js?v=48';
+import { fmt, typeset } from './rich.js?v=48';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=48';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -209,7 +209,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 47;
+const APP_V = 48;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -728,7 +728,7 @@ function home() {
    ================================================================= */
 function stats() {
   VIEW.innerHTML = '<div class="wrap narrow">' + crumbs([['الإحصائيات']]) +
-    '<header class="phead"><h1>الإحصائيات وخطة المراجعة</h1><p>تحليل أسئلة الامتحانات الرسمية من 16/17 إلى 25/26: أهمية كل شابيطر، المواضيع المتكررة، وكيف توزع وقت مراجعتك. اضغط على أي لوحة لتكبيرها.</p></header>' +
+    '<header class="phead"><h1>الإحصائيات وخطة المراجعة</h1><p>تحليل أسئلة الامتحانات الرسمية' + (yrSpan(officialQs()) ? ' (' + yrSpan(officialQs()).replace(' → ', ' إلى ') + ')' : '') + ': أهمية كل شابيطر، المواضيع المتكررة، وكيف توزع وقت مراجعتك. اضغط على أي لوحة لتكبيرها.</p></header>' +
     M.overview.map((p, i) => '<section class="ovp"><h2><span class="lat">' + (i + 1) + '</span>' + esc(p.ar) + '<small class="lat">' + esc(p.en) + '</small></h2>' + fig(p.img, 'zoomable', '16 / 9') + '</section>').join('') + '</div>';
   hydrate();
 }
@@ -745,7 +745,7 @@ function chapter(ch) {
   const rev = ch.revision.map((p) => '<a class="tile" href="#/c/' + ch.id + '/p/' + p.n + '"><b>' + esc(p.ar || 'مراجعة') + '</b><small class="lat">' + esc(p.t) + '</small>' + (readP(p.n) ? '<i class="ck"></i>' : '') + '</a>').join('');
   const qs = ch.qcm.map((set) => {
     const keys = SETKEYS[sk(ch.id, set.key)], a = keys.filter(res).length, ok = keys.filter((k) => res(k) && res(k).ok).length;
-    return '<a class="qtile ' + set.key + '" href="#/c/' + ch.id + '/q/' + set.key + '"><span class="qk">' + (set.key === 'official' ? 'EXAM' : 'NEW') + '</span><b>' + esc(set.ar) + '</b><small><span class="lat">' + set.q.length + '</span> سؤالاً' + (set.key === 'official' ? ' من امتحانات 16/17 إلى 25/26' : ' بنفس أسلوب الامتحان') + '</small>' +
+    return '<a class="qtile ' + set.key + '" href="#/c/' + ch.id + '/q/' + set.key + '"><span class="qk">' + (set.key === 'official' ? 'EXAM' : 'NEW') + '</span><b>' + esc(set.ar) + '</b><small><span class="lat">' + qWord(set.q.length) + '</span>' + (set.key === 'official' ? (yrSpan(set.q) ? ' من امتحانات ' + yrSpan(set.q).replace(' → ', ' إلى ') : ' من الامتحانات') : ' بنفس أسلوب الامتحان') + '</small>' +
       '<span class="pbar"><i style="width:' + pct(a, set.q.length) + '%"></i></span><span class="pl">' + (a ? 'أجبت عن <b class="lat">' + a + '/' + set.q.length + '</b> · صحيح <b class="lat">' + ok + '</b>' : 'لم تبدأ بعد') + '</span><span class="go">' + (a && a < set.q.length ? 'تابع' : a ? 'راجع' : 'ابدأ') + ' ←</span></a>';
   }).join('');
   const nw = wrongKeys(ch.id).length;
@@ -880,7 +880,7 @@ function practice(r) {
   const base = '#/c/' + ch.id + '/q/' + set.key + '/';
   qscreen({
     mode: 'practice', keys: keys, i: r.i, href: (j) => base + (j + 1), result: res,
-    chip: (k) => res(k) ? (res(k).ok ? 'ok' : 'ko') : '', num: (k) => ITEMS[k].q.n,
+    chip: (k) => res(k) ? (res(k).ok ? 'ok' : 'ko') : '',
     end: '<a class="btn" href="#/c/' + ch.id + '">رجوع للشابيطر</a>', set: set, ch: ch,
     top: crumbs([['CH ' + cn(ch) + ' · ' + esc(ch.ar), '#/c/' + ch.id], [esc(set.ar)]]) +
       '<header class="qhead"><div><p class="kick">' + (set.key === 'official' ? 'EXAM' : 'PROPOSED') + ' · <span class="lat">' + esc(ch.en) + '</span></p><h1>' + esc(set.ar) + '</h1></div>' + sc.html + '</header>' +
@@ -1158,6 +1158,16 @@ function onTick() {
   if (left <= 0) { if (prog.exam.mode === 'q') advanceQ(true); else submitExam(true); }
 }
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+// years span of a list of questions, e.g. "16/17 → 25/26" (handles "2019/20", "Ratr 24/25")
+function yrSpan(qs) {
+  const ys = [];
+  qs.forEach((q) => (q.years || []).forEach((y) => { const m = String(y).match(/(\d{2,4})\s*\/\s*(\d{2})(?!.*\d{2,4}\s*\/)/); if (m) ys.push((m[1].slice(-2)) + '/' + m[2]); }));
+  if (!ys.length) return '';
+  const u = Array.from(new Set(ys)).sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+  return u.length === 1 ? u[0] : u[0] + ' → ' + u[u.length - 1];
+}
+const qWord = (n) => !n ? 'لا توجد أسئلة' : n === 1 ? 'سؤال واحد' : n === 2 ? 'سؤالان' : (n >= 3 && n <= 10 ? n + ' أسئلة' : n + ' سؤالاً');
+const officialQs = () => { const L = []; M.chapters.forEach((c) => (c.qcm || []).forEach((st) => { if (st.key === 'official') st.q.forEach((q) => L.push(q)); })); return L; };
 function poolFor(src, chs) {
   return Object.keys(ITEMS).filter((k) => chs.indexOf(ITEMS[k].ch.id) >= 0 && !isOpen(k) && (src === 'all' || ITEMS[k].set.key === src));
 }
@@ -1193,6 +1203,8 @@ function examHome() {
     return;
   }
   const radio = (name, val, label, sub, on, dis) => '<label class="ropt' + (dis ? ' dis' : '') + '"><input type="radio" name="' + name + '" value="' + val + '"' + (on ? ' checked' : '') + (dis ? ' disabled' : '') + '><span><b>' + label + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</span></label>';
+  const allIds = M.chapters.map((c) => c.id), nOff = poolFor('official', allIds).length, nPro = poolFor('proposed', allIds).length, ySpan = yrSpan(officialQs());
+  if ((f.src === 'official' && !nOff) || (f.src === 'proposed' && !nPro)) f.src = 'all';
   const pool = poolFor(f.src, f.chs).length;
   const maxMin = EXAM_MAX[f.n] || Math.round(f.n * 1.5);
   const hOpts = []; for (let h = 0; h <= Math.floor(maxMin / 60); h++) hOpts.push('<option value="' + h + '"' + (h === f.h ? ' selected' : '') + '>' + h + '</option>');
@@ -1202,7 +1214,7 @@ function examHome() {
     '<header class="phead"><h1>امتحان تجريبي</h1><p>اختر عدد الأسئلة ومصدرها والشابيطرات والوقت. الأسئلة عشوائية في كل مرة، ولا يظهر التصحيح إلا بعد التسليم، وتذهب أخطاؤك تلقائياً إلى «أخطائي» و«مراجعة اليوم».</p></header>' +
     '<div class="exset card" id="exset">' +
     '<h3>1 · عدد الأسئلة <small>متاح الآن: <b class="lat">' + pool + '</b></small></h3><div class="ropts five">' + [20, 40, 60, 80, 100].map((n) => radio('n', n, n + ' سؤالاً', 'حتى ' + fmtDur(EXAM_MAX[n] * 60), f.n === n, n > pool)).join('') + '</div>' +
-    '<h3>2 · مصدر الأسئلة</h3><div class="ropts">' + radio('src', 'official', 'الامتحانات الرسمية', '99 سؤالاً (16/17 → 25/26)', f.src === 'official') + radio('src', 'proposed', 'الكيسيام المقترح', '81 سؤالاً', f.src === 'proposed') + radio('src', 'all', 'معاً', '180 سؤالاً', f.src === 'all') + '</div>' +
+    '<h3>2 · مصدر الأسئلة</h3><div class="ropts">' + radio('src', 'official', 'الامتحانات الرسمية', qWord(nOff) + (ySpan ? ' (' + ySpan + ')' : ''), f.src === 'official', !nOff) + radio('src', 'proposed', 'الكيسيام المقترح', qWord(nPro), f.src === 'proposed', !nPro) + radio('src', 'all', 'معاً', qWord(nOff + nPro), f.src === 'all') + '</div>' +
     '<h3>3 · الشابيطرات</h3><div class="chks">' + M.chapters.map((c) => '<label class="chk" style="--c:var(--c' + c.id + ')"><input type="checkbox" name="ch" value="' + c.id + '"' + (f.chs.indexOf(c.id) >= 0 ? ' checked' : '') + '><span><b class="lat">CH ' + cn(c) + '</b> ' + esc(c.ar) + '</span></label>').join('') + '</div>' +
     (M.chapters.some((c) => c.share != null) ? '<label class="tgl"><input type="checkbox" name="weighted"' + (f.weighted ? ' checked' : '') + '><span>وزّع الأسئلة حسب أهمية كل شابيطر في الامتحان الحقيقي</span></label>' : '') +
     '<h3>4 · الوقت</h3><div class="ropts">' + radio('tmode', 't', 'وقت للامتحان كله', 'تتنقل بحرية بين الأسئلة', f.tmode === 't') + radio('tmode', 'q', 'وقت لكل سؤال', 'ينتقل تلقائياً عند انتهاء الوقت', f.tmode === 'q') + '</div>' +

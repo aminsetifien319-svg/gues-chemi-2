@@ -1,9 +1,9 @@
 // لوحة الإدارة: قبول الطلبة، إدارة القائمة، ورفع المحتوى (الفهرس + حزم الصور) إلى Firestore.
 import {
   watchUser, signIn, signOutUser, isAdminUser, listRequests, listAllowed,
-  approve, reject, removeAllowed, addAllowed, authAgeHours, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, loadSubjects, saveSubjects, DEFAULT_SUBJECTS, configMissing
-} from './firebase.js?v=48';
-import { mountEditor } from './editor.js?v=48';
+  approve, reject, removeAllowed, addAllowed, authAgeHours, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, loadSubjects, saveSubjects, DEFAULT_SUBJECTS, configMissing, YEAR, YEAR_AR
+} from './firebase.js?v=51';
+import { mountEditor } from './editor.js?v=51';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const box = $('#box');
@@ -12,6 +12,14 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 let me = null, note = '', busy = false, edMounted = false;
 const NEWTXT = /^x[xt]\d+_[0-9a-f]{10}$/;   // معرّفات النص الجديدة (مشتقة من المحتوى)
 
+// اختيار السنة: كل سنة لها طلباتها وطلبتها ومحتواها
+function yearBar() {
+  const base = location.origin + location.pathname.replace(/admin\.html$/, '');
+  return '<div class="card yearbar"><h2>السنة الدراسية</h2><div class="seg" role="group">' +
+    [1, 2].map((y) => '<a class="' + (y === YEAR ? 'on' : '') + '" href="admin.html?y=' + y + '">' + (y === 1 ? 'السنة الأولى' : 'السنة الثانية') + '</a>').join('') + '</div>' +
+    '<p class="small">كل ما في هذه الصفحة الآن خاص بـ<b>' + YEAR_AR + '</b>. رابط الطلبة: <bdi class="lat" dir="ltr">' + esc(base + '?y=' + YEAR) + '</bdi> <button type="button" class="btn sm" id="copylink" data-link="' + esc(base + '?y=' + YEAR) + '">نسخ الرابط</button></p>' +
+    '<p class="small">لإعطاء طالب السنتين معاً: أضف بريده في «الطلبة المقبولون» في كل سنة.</p></div>';
+}
 function gate(inner) { box.innerHTML = '<div class="gate" style="min-height:60vh"><div class="card">' + inner + '</div></div>'; }
 
 function li(it, kind) {
@@ -103,16 +111,16 @@ async function refresh() {
       return '<tr><td>' + esc(x.ar || x.key) + '</td><td class="lat">' + esc(m.build || '—') + '</td><td class="' + (ok ? 'okc' : 'koc') + '">' + (ok ? '✓ النص المصحّح' : '✗ نص قديم (' + fresh + '/' + tx.length + ')') + '</td></tr>';
     }).join('');
   } catch (e) {}
-  box.innerHTML =
+  box.innerHTML = yearBar() +
     (status ? '<div class="card"><h2>حالة المحتوى على الخادم <small>Live content</small></h2><div class="tscroll"><table class="ptab"><thead><tr><th>المادة</th><th>نسخة المحتوى</th><th>النص المكتوب</th></tr></thead><tbody>' + status + '</tbody></table></div><p class="small">إن ظهر «✗ نص قديم» فالمادة لم تُرفع بالملفات الجديدة بعد.</p></div>' : '') +
-    '<div class="card"><h2>طلبات الوصول <small>' + req.length + ' pending</small></h2>' +
+    '<div class="card"><h2>طلبات الوصول · ' + YEAR_AR + ' <small>' + req.length + ' pending</small></h2>' +
     (req.length ? '<ul class="list" id="reqs">' + req.map((r) => li(r, 'req')).join('') + '</ul>' : '<p class="small">لا توجد طلبات الآن.</p>') + '</div>' +
-    '<div class="card"><h2>الطلبة المقبولون <small>' + allowed.length + ' students</small></h2>' +
+    '<div class="card"><h2>الطلبة المقبولون · ' + YEAR_AR + ' <small>' + allowed.length + ' students</small></h2>' +
     (allowed.length ? '<p class="row-form"><button type="button" class="btn" id="copymails" data-mails="' + esc(allowed.map((r) => r.email).join(', ')) + '">📋 نسخ إيميلات الطلبة المقبولين (لمشاركة فيديوهات Drive)</button></p>' : '') +
     '<div class="row-form"><input class="input" id="newmail" type="email" placeholder="student@gmail.com" autocomplete="off" dir="ltr"><button type="button" class="btn pri" id="add">إضافة بريد</button></div>' +
     (allowed.length ? '<ul class="list" id="alw">' + allowed.map((r) => li(r, 'alw')).join('') + '</ul>' : '<p class="small">لا يوجد طلبة مقبولون بعد.</p>') + '</div>' +
     progressCard(allowed, progress, devices) +
-    '<div class="card"><h2>محتوى الموقع <small>Content</small></h2>' +
+    '<div class="card"><h2>محتوى الموقع · ' + YEAR_AR + ' <small>Content</small></h2>' +
     '<p class="small">اختر <b>كل</b> ملفات المحتوى معاً: <b class="lat">manifest.json</b> وملفات <b class="lat">pack-….json</b> (7 ملفات). لإضافة بطاقات المراجعة وحدها اختر الملف <b class="lat">pack-cards.json</b> فقط. <b>للكيمياء العضوية</b> اختر الملفات الثلاثة: <b class="lat">manifest_org.json</b> و<b class="lat">pack-org11.json</b> و<b class="lat">pack-org12.json</b>. تعديلاتك من المحرّر تبقى محفوظة عند إعادة الرفع. ملاحظة: الصور التي رُفعت سابقاً من هذا المتصفح تُتخطّى تلقائياً. الرفع يستغرق بضع دقائق، وإن انقطع أعد الضغط على «رفع المحتوى» من نفس المتصفح وسيكمل من حيث توقف.</p>' +
     '<div class="row-form"><input class="input" id="file" type="file" accept="application/json,.json" multiple><button type="button" class="btn pri" id="upload">رفع المحتوى</button></div>' +
     '<div class="prog-up" id="up" hidden><span class="pbar"><i id="upbar" style="width:0%"></i></span><p class="small" id="uptxt"></p></div>' +
@@ -152,7 +160,7 @@ async function upload(files) {
   let done = 0, sent = 0, skipped = 0; const missing = [];
   const step = () => { done++; bar.style.width = Math.round(100 * done / ids.length) + '%'; txt.textContent = done + ' / ' + ids.length + ' صورة · رُفع ' + sent + ' · موجود مسبقاً ' + skipped; };
   // نتذكّر في هذا المتصفح الصور التي رُفعت، فإن انقطع الرفع نكمل من حيث توقف.
-  const DONE_KEY = 'gueschemi.uploaded:' + me.email;
+  const DONE_KEY = (YEAR === 2 ? 'gueschemi.y2.uploaded:' : 'gueschemi.uploaded:') + me.email;   // لكل سنة: صور السنة الأولى ليست مرفوعة في الثانية
   let doneSet = new Set();
   try { doneSet = new Set(JSON.parse(localStorage.getItem(DONE_KEY) || '[]')); } catch (e) {}
   const remember = () => { try { localStorage.setItem(DONE_KEY, JSON.stringify(Array.from(doneSet))); } catch (e) {} };
@@ -184,7 +192,7 @@ async function upload(files) {
   if (!verified) throw new Error('حُفظ الفهرس لكن التحقق من الخادم فشل. أعد الضغط على «رفع المحتوى».');
   if (sub) {   // سجل المواد: الكيمياء العامة + هذه المادة
     let L = []; try { L = await loadSubjects(); } catch (e) { L = DEFAULT_SUBJECTS.slice(); }
-    if (!L.some((x) => x.key === 'gen')) L.unshift(DEFAULT_SUBJECTS[0]);
+    if (YEAR === 1 && !L.some((x) => x.key === 'gen')) L.unshift(DEFAULT_SUBJECTS[0]);
     const e = { key: sub.key, doc: docId, en: sub.en || sub.key, ar: sub.ar || sub.key };
     const i = L.findIndex((x) => x.key === sub.key); if (i >= 0) L[i] = e; else L.push(e);
     await saveSubjects(L);
@@ -246,6 +254,7 @@ document.addEventListener('click', async (e) => {
   const t = e.target;
   if (t.id === 'relogin') { try { await signOutUser(); await signIn(); } catch (err) { gate('<h1>تعذّر الدخول</h1><p class="err">' + esc(err.message || err) + '</p>'); } return; }
   if (t.id === 'out') { await signOutUser(); return; }
+  if (t.id === 'copylink') { const v = t.dataset.link || ''; try { await navigator.clipboard.writeText(v); } catch (err) {} t.textContent = '✓ نُسخ'; return; }
   if (t.id === 'copymails') {
     const v = t.dataset.mails || '';
     try { await navigator.clipboard.writeText(v); } catch (err) { const ta = document.createElement('textarea'); ta.value = v; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e2) {} ta.remove(); }
@@ -297,4 +306,5 @@ document.addEventListener('click', async (e) => {
 });
 
 window.addEventListener('beforeunload', (e) => { if (busy) { e.preventDefault(); e.returnValue = ''; } });
+{ const sb = $('#admsub'); if (sb) sb.textContent = 'لوحة الإدارة · ' + YEAR_AR; }
 watchUser(render);

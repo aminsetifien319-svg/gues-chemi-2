@@ -935,7 +935,7 @@ html[data-theme="dark"] .yrs.nokey{background:#3a2c10;color:#f3cf86}
 .ccard.cov .cnum{margin-top:-30px;position:relative;z-index:1;box-shadow:0 6px 16px rgba(0,0,0,.35)}
 /* صفحة الدرس: الغلاف خلفية مموّهة + الغلاف الواضح في العمود */
 .chero.cov{background:#07101f}
-.chero-bg{position:absolute;inset:-40px;filter:blur(22px) saturate(1.2);transform:scale(1.08);pointer-events:none}
+.chero-bg{position:absolute;inset:-30px;filter:blur(26px) saturate(1.25);pointer-events:none;background-size:100% 100%!important;background-position:center!important}
 .chero-bg.ok{opacity:.55}
 .chero.cov::before{content:"";position:absolute;inset:0;background:linear-gradient(120deg,rgba(7,16,31,.92) 0,rgba(7,16,31,.7) 55%,rgba(7,16,31,.45) 100%);z-index:0;pointer-events:none}
 .chero.cov .chero-in{z-index:1}
@@ -1091,3 +1091,51 @@ html[data-theme="dark"] .lesson .call.note{--k2:#a99cff}
 .qcard[data-qlang=ar] .qtext.pair .stem[dir=ltr],.qcard[data-qlang=ar] .ot.pair .oe,.qcard[data-qlang=ar] .solt .bi.pair>.en{display:none}
 .qcard[data-qlang=ar] .ot.pair .oa{font-size:15px;color:var(--ink)}
 .qcard[data-qlang=ar] .qtext.pair .stem.sa{font-size:17px;color:var(--ink)}
+/* السنة الدراسية */
+.seg a{border-radius:999px;padding:8px 18px;font-size:14px;font-weight:800;color:var(--mut);text-decoration:none}
+.seg a.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(10,26,51,.15)}
+.yearbar .seg{margin:4px 0 10px}
+.sl.yr{color:var(--cyan2,#1f8fe0)}
+/* الشريط العلوي على الهواتف الضيقة: لا تداخل بين الشعار وزر البحث */
+.ic.menu span{background:#e6f0fb}
+.top .brand{flex:0 1 auto;overflow:hidden}
+@media (max-width:440px){
+  .top{gap:6px;padding:0 8px}
+  .ic.menu{width:34px;height:38px}
+  .brand{gap:7px}
+  .brand img{width:30px;height:30px}
+  .brand b{font-size:12.5px;letter-spacing:.05em}
+  .theme{width:32px;height:32px}
+  .user .av{display:none}
+  .user .chip{height:30px;padding:0 9px;font-size:12.5px}
+}
+@media (max-width:350px){
+  .brand b{font-size:11px;letter-spacing:.02em}
+  .top{gap:4px;padding:0 6px}
+}
+/* الملخص في صورة (Infographic) */
+.tile.inft{border-color:#c8903a;background:linear-gradient(135deg,color-mix(in srgb,#c8903a 12%,var(--card)),var(--card))}
+.infobox{max-width:820px;margin:14px auto 0}
+.infobox figure.info{border-radius:14px;overflow:hidden;box-shadow:0 6px 24px rgba(10,26,51,.12);cursor:zoom-in}
+.acts.center{justify-content:center;margin-top:18px}
+
+/* v52: شريط علوي لا يتداخل فيه شيء على أي عرض + خلفية الفصل تتكيف مع كل الشاشات */
+.top{flex-wrap:nowrap;overflow:hidden}
+.top .brand{flex:1 1 0;min-width:0;overflow:hidden}
+.top .brand span{min-width:0;overflow:hidden}
+.top .brand b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top .ic,.top .theme,.top .user{flex:none}
+.top .theme,.top .theme.srch{margin-inline-start:0}
+@media (max-width:440px){
+  .top .brand b{font-size:clamp(10px,3.6vw,13px);letter-spacing:.04em}
+  .top .brand img{width:28px;height:28px}
+  .top .theme{width:30px;height:30px}
+  .top .user .av{display:none}
+}
+@media (max-width:335px){
+  .top .brand img{display:none}
+}
+.chero.cov::before{background:linear-gradient(180deg,rgba(7,16,31,.78) 0,rgba(7,16,31,.62) 100%)}
+@media (min-width:821px){
+  .chero.cov::before{background:linear-gradient(120deg,rgba(7,16,31,.92) 0,rgba(7,16,31,.7) 55%,rgba(7,16,31,.45) 100%)}
+}

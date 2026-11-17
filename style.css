@@ -1091,25 +1091,3 @@ html[data-theme="dark"] .lesson .call.note{--k2:#a99cff}
 .qcard[data-qlang=ar] .qtext.pair .stem[dir=ltr],.qcard[data-qlang=ar] .ot.pair .oe,.qcard[data-qlang=ar] .solt .bi.pair>.en{display:none}
 .qcard[data-qlang=ar] .ot.pair .oa{font-size:15px;color:var(--ink)}
 .qcard[data-qlang=ar] .qtext.pair .stem.sa{font-size:17px;color:var(--ink)}
-/* السنة الدراسية */
-.seg a{border-radius:999px;padding:8px 18px;font-size:14px;font-weight:800;color:var(--mut);text-decoration:none}
-.seg a.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(10,26,51,.15)}
-.yearbar .seg{margin:4px 0 10px}
-.sl.yr{color:var(--cyan2,#1f8fe0)}
-/* الشريط العلوي على الهواتف الضيقة: لا تداخل بين الشعار وزر البحث */
-.ic.menu span{background:#e6f0fb}
-.top .brand{flex:0 1 auto;overflow:hidden}
-@media (max-width:440px){
-  .top{gap:6px;padding:0 8px}
-  .ic.menu{width:34px;height:38px}
-  .brand{gap:7px}
-  .brand img{width:30px;height:30px}
-  .brand b{font-size:12.5px;letter-spacing:.05em}
-  .theme{width:32px;height:32px}
-  .user .av{display:none}
-  .user .chip{height:30px;padding:0 9px;font-size:12.5px}
-}
-@media (max-width:350px){
-  .brand b{font-size:11px;letter-spacing:.02em}
-  .top{gap:4px;padding:0 6px}
-}

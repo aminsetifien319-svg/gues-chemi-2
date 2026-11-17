@@ -1,11 +1,10 @@
 // Gues Chemi: دخول Google ← القبول ← حد الأجهزة ← الدروس نصاً، الكيسيام، الامتحان التجريبي، المراجعة، البحث، التقدّم.
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
-  loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing,
-  YEAR, YEAR_EXPLICIT, YEAR_AR, YEAR_EN, hasYear, switchYear
-} from './firebase.js?v=50';
-import { fmt, typeset } from './rich.js?v=50';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=50';
+  loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing
+} from './firebase.js?v=48';
+import { fmt, typeset } from './rich.js?v=48';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=48';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -24,10 +23,6 @@ let me = null, isAdmin = false, M = null, prog = null, KEY = '', ready = false;
 let FLOW = {}, ITEMS = {}, SETKEYS = {};
 let quizSel = {}, revRes = {}, revLists = {};
 let SUBJ = [], MS = {}, CURS = '', MJS = {};
-let OTHER_OK = false;                                   // مقبول أيضاً في السنة الأخرى (أو مشرف)
-const OTHER_Y = YEAR === 2 ? 1 : 2;
-const OTHER_AR = OTHER_Y === 2 ? 'السنة الثانية' : 'السنة الأولى';
-const SUBK = YEAR === 2 ? 'gueschemi.y2.subject' : 'gueschemi.subject';   // المادة المختارة، لكل سنة
 let CUR = null, cloud = 'off', pushTimer = 0, tick = 0, installEvt = null, renderId = 0;
 const TXT = {};
 let viewMode = 'text';
@@ -54,9 +49,9 @@ function applyTheme() {
 function setSubject(key) {
   if (!MS[key] || (key === CURS && M === MS[key])) return;
   CURS = key; M = MS[key]; applyTheme();
-  try { localStorage.setItem(SUBK, key); } catch (e) {}
+  try { localStorage.setItem('gueschemi.subject', key); } catch (e) {}
   IDX = null; exForm = null; revLists = {}; revRes = {};
-  const sm = $('.brand small'); if (sm) sm.textContent = subj().en + ' · ' + YEAR_EN + ' Pharmacy';
+  const sm = $('.brand small'); if (sm) sm.textContent = subj().en + ' · 1st-year Pharmacy';
   M.chapters.forEach((ch) => { chText(ch).catch(() => {}); chFlash(ch).catch(() => {}); });
 }
 function blank() { return { v: 4, r: {}, a: {}, f: {}, sr: {}, fc: {}, last: '', lastT: 0, exam: null, hist: [] }; }
@@ -70,7 +65,7 @@ function upgrade(p) {
 }
 function readLocal() {
   try {
-    const raw = localStorage.getItem(KEY) || (YEAR === 1 ? localStorage.getItem('gueschemi.v3:' + me.email) || localStorage.getItem('gueschemi.v2:' + me.email) : null);
+    const raw = localStorage.getItem(KEY) || localStorage.getItem('gueschemi.v3:' + me.email) || localStorage.getItem('gueschemi.v2:' + me.email);
     return raw ? upgrade(JSON.parse(raw)) : blank();
   } catch (e) { return blank(); }
 }
@@ -172,19 +167,18 @@ function gate(inner) {
 const acts = (a) => '<p class="acts">' + a + '</p>';
 function gLogin(msg) {
   if (configMissing) return gate('<h1>الموقع غير مُهيّأ بعد</h1><p>الصق إعدادات Firebase في الملف <b class="lat">firebase-config.js</b>.</p>');
-  gate('<h1>' + YEAR_AR + ' صيدلة</h1><p>الدروس والكيسيام متاحة للطلبة المقبولين فقط. سجّل الدخول بحساب Google.</p>' +
+  gate('<h1>الكيمياء العامة والعضوية · السنة الأولى صيدلة</h1><p>الدروس والكيسيام متاحة للطلبة المقبولين فقط. سجّل الدخول بحساب Google.</p>' +
     (msg ? '<p class="err" role="alert">' + esc(msg) + '</p>' : '') +
     acts('<button type="button" class="btn pri g" data-act="login"><svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>الدخول بحساب Google</button>'));
 }
 function gRequest(u) {
-  gate('<h1>مرحباً ' + esc((u.name || '').split(' ')[0]) + '</h1><p>حسابك <bdi class="lat">' + esc(u.email) + '</bdi> غير مقبول بعد في <b>' + YEAR_AR + '</b>. أرسل طلب وصول ليراجعه المشرف.</p>' + otherYearNote() +
-    acts('<button type="button" class="btn pri" data-act="request">إرسال طلب الوصول (' + YEAR_AR + ')</button><button type="button" class="btn" data-act="logout">خروج</button>'));
+  gate('<h1>مرحباً ' + esc((u.name || '').split(' ')[0]) + '</h1><p>حسابك <bdi class="lat">' + esc(u.email) + '</bdi> غير مقبول بعد. أرسل طلب وصول ليراجعه المشرف.</p>' +
+    acts('<button type="button" class="btn pri" data-act="request">إرسال طلب الوصول</button><button type="button" class="btn" data-act="logout">خروج</button>'));
 }
 function gPending(u) {
-  gate('<h1>طلبك قيد المراجعة</h1><p>أُرسل طلب الحساب <bdi class="lat">' + esc(u.email) + '</bdi> لـ<b>' + YEAR_AR + '</b>. ستتمكن من الدخول عندما يقبله المشرف.</p>' + otherYearNote() +
+  gate('<h1>طلبك قيد المراجعة</h1><p>أُرسل طلب الحساب <bdi class="lat">' + esc(u.email) + '</bdi>. ستتمكن من الدخول عندما يقبله المشرف.</p>' +
     acts('<button type="button" class="btn pri" data-act="recheck">تحقّق من جديد</button><button type="button" class="btn" data-act="logout">خروج</button>'));
 }
-function otherYearNote() { return OTHER_OK ? '<p class="small">حسابك مقبول في <b>' + OTHER_AR + '</b>: <a href="?y=' + OTHER_Y + '">افتح ' + OTHER_AR + ' ←</a></p>' : ''; }
 function gDevices(d) {
   const list = (d && d.ids || []).map((id) => { const x = (d.info || {})[id] || {}; return '<li><b>' + esc(x.name || 'جهاز') + '</b> <small class="lat">' + (x.t ? new Date(x.t).toLocaleDateString('fr-DZ') : '') + '</small></li>'; }).join('');
   gate('<h1>هذا الحساب مستعمل على جهازين</h1><p>كل حساب يعمل على <b>جهازين فقط</b>. هذا الجهاز ليس منهما:</p><ul class="devl">' + list + '</ul><p>إن غيّرت هاتفك أو حاسوبك، اطلب من المشرف «إعادة تعيين الأجهزة» لحسابك.</p>' +
@@ -206,7 +200,7 @@ function renderUser() {
   if (!me) { u.innerHTML = ''; return; }
   const ini = esc((me.name || me.email).trim().charAt(0).toUpperCase());
   u.innerHTML = (installEvt ? '<button type="button" class="chip inst" data-act="install">⤓ ثبّت التطبيق</button>' : '') +
-    (isAdmin && ready ? '<a class="chip" href="admin.html?y=' + YEAR + '">الإدارة</a>' : '') +
+    (isAdmin && ready ? '<a class="chip" href="admin.html">الإدارة</a>' : '') +
     '<span class="av" title="' + esc(me.email) + '">' + ini + '</span>' +
     '<button type="button" class="chip" data-act="logout">خروج</button>';
 }
@@ -215,7 +209,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 50;
+const APP_V = 48;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -281,13 +275,10 @@ async function onUser(u) {
   me = u; isAdmin = false; M = null; cloud = 'off';
   renderUser();
   if (!u) { gLogin(); return; }
-  KEY = (YEAR === 2 ? 'gueschemi.y2.v4:' : 'gueschemi.v4:') + u.email;   // تقدّم منفصل لكل سنة
+  KEY = 'gueschemi.v4:' + u.email;
   gate('<p>جارٍ التحقق من حسابك…</p>');
   try {
     const acc = await getAccess(u.email);
-    OTHER_OK = acc === 'admin' ? true : await hasYear(u.email, OTHER_Y);
-    // الطالب غير مقبول في هذه السنة لكنه مقبول في الأخرى، ولم يفتح رابط سنة محددة: نوجّهه لسنته
-    if (acc !== 'admin' && acc !== 'allowed' && OTHER_OK && !YEAR_EXPLICIT) { switchYear(OTHER_Y); return; }
     if (acc === 'admin' || acc === 'allowed') {
       isAdmin = (acc === 'admin');
       if (!isAdmin) { const dv = await checkDevice(); if (!dv.ok) return gDevices(dv.d); }
@@ -297,14 +288,14 @@ async function onUser(u) {
       const got = await Promise.all(SL.map((x) => loadManifest(x.doc).catch(() => null)));
       SL.forEach((x, i) => { const m = got[i]; if (m && m.chapters && m.chapters.length) { MS[x.key] = m; MJS[x.key] = JSON.stringify(m); } });
       SUBJ = SL.filter((x) => MS[x.key]);
-      let want = ''; try { want = localStorage.getItem(SUBK) || ''; } catch (e) {}
+      let want = ''; try { want = localStorage.getItem('gueschemi.subject') || ''; } catch (e) {}
       CURS = MS[want] ? want : (SUBJ[0] ? SUBJ[0].key : '');
       M = MS[CURS] || null; applyTheme();
       if (!unwatch) { const us = SUBJ.map((x) => watchManifest((nm) => onManifest(x.key, nm), x.doc)); unwatch = () => us.forEach((f) => f && f()); }
       if (!M || !M.chapters || !M.chapters.length) {
         renderUser();
         return gError(isAdmin ? 'لم يُرفع المحتوى بعد. افتح صفحة الإدارة وارفع ملفات المحتوى.' : 'المحتوى غير متاح حالياً، حاول لاحقاً.',
-          isAdmin ? acts('<a class="btn pri" href="admin.html?y=' + YEAR + '">صفحة الإدارة (' + YEAR_AR + ')</a><a class="btn" href="?y=' + OTHER_Y + '">' + OTHER_AR + '</a>') : otherYearNote());
+          isAdmin ? acts('<a class="btn pri" href="admin.html">صفحة الإدارة</a>') : '');
       }
       let remote = null;
       try { const j = await loadProgress(u.email); remote = j ? upgrade(JSON.parse(j)) : null; cloud = 'on'; } catch (e) { cloud = 'off'; }
@@ -316,7 +307,7 @@ async function onUser(u) {
 
 function start(remote) {
   FLOW = {}; ITEMS = {}; SETKEYS = {};
-  const sm = $('.brand small'); if (sm) sm.textContent = subj().en + ' · ' + YEAR_EN + ' Pharmacy';
+  const sm = $('.brand small'); if (sm) sm.textContent = subj().en + ' · 1st-year Pharmacy';
   SUBJ.forEach((sj) => { const MM = MS[sj.key]; const FIX = (MM.fix && MM.fix.ans) || {}; MM.chapters.forEach((ch) => {   // كل المواد معاً (وتصحيحات الأجوبة من المحرّر)
     ch.sub = sj.key;
     const list = [];
@@ -410,7 +401,6 @@ function side(r) {
   let h = '<nav aria-label="الفهرس">' + subjTabs('insd') + '<a class="sl' + (r.v === 'home' ? ' on' : '') + '" href="#/"><i class="ico">⌂</i>الرئيسية</a>' +
     '<a class="sl' + (r.v === 'search' ? ' on' : '') + '" href="#/search"><i class="ico">⌕</i>البحث</a>' +
     '<a class="sl' + (r.v === 'progress' ? ' on' : '') + '" href="#/progress"><i class="ico">↗</i>تقدّمي</a>' +
-    (OTHER_OK ? '<a class="sl yr" href="?y=' + OTHER_Y + '"><i class="ico">⇄</i>الانتقال إلى ' + OTHER_AR + '</a>' : '') +
     (M.overview && M.overview.length ? '<a class="sl' + (r.v === 'stats' ? ' on' : '') + '" href="#/stats"><i class="ico">▤</i>الإحصائيات وخطة المراجعة</a>' : '') +
     '<p class="sh">أدوات المراجعة</p>' +
     '<a class="sl' + (r.v === 'review' && r.src === 'today' ? ' on' : '') + '" href="#/today"><i class="ico">↻</i>مراجعة اليوم' + (nd ? '<em class="lat live">' + nd + '</em>' : '') + '</a>' +
@@ -711,7 +701,7 @@ function home() {
   const first = (me.name || '').split(' ')[0];
   const nw = wrongKeys().length, nf = favKeys().length + favPages().length, nd = dueKeys().length, lastEx = prog.hist[0];
   VIEW.innerHTML =
-    '<div class="hero' + (M.hero ? ' hcov' : '') + '">' + (M.hero ? bgDiv(M.hero, 'hero-bg') : '<div class="hero-art">' + subjIcon(CURS, 'hico') + '</div>') + '<div class="hero-in">' + subjTabs('hero') + '<p class="kick lat">' + subjIcon(CURS, 'kico') + esc(subj().en) + ' · ' + YEAR_EN + ' Pharmacy</p>' +
+    '<div class="hero' + (M.hero ? ' hcov' : '') + '">' + (M.hero ? bgDiv(M.hero, 'hero-bg') : '<div class="hero-art">' + subjIcon(CURS, 'hico') + '</div>') + '<div class="hero-in">' + subjTabs('hero') + '<p class="kick lat">' + subjIcon(CURS, 'kico') + esc(subj().en) + ' · 1st-year Pharmacy</p>' +
     '<h1>' + (first ? 'أهلاً ' + esc(first) + '، ' : '') + esc(subj().ar) + ' كاملة، شابيطر بشابيطر</h1>' +
     '<p class="lead">اقرأ كل درس مكتوباً، حلّ كيسيام الامتحانات والكيسيام المقترح، راجع أخطاءك كل يوم، ثم اختبر نفسك في امتحان تجريبي بالوقت.</p>' +
     '<form class="hsearch" data-search><input type="search" name="q" placeholder="ابحث في الدروس والأسئلة… مثلاً ' + ({ org: 'hybridization أو alkene', bio: 'Gram أو virus', stat: 'median أو variance', ana: 'sagittal أو تشريح', hist: 'Hippocrates أو جالينوس' }[CURS] || 'Slater أو هوند') + '" aria-label="بحث" autocomplete="off"><button type="submit" class="btn pri">بحث</button></form>' +

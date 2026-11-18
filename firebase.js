@@ -4,10 +4,10 @@ import {
   getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
-  initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache,
-  doc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, CACHE_SIZE_UNLIMITED,
+  doc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch, query, orderBy, limit
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-import * as CFG from './firebase-config.js?v=74';
+import * as CFG from './firebase-config.js?v=77';
 const firebaseConfig = CFG.firebaseConfig;
 
 export const configMissing = !firebaseConfig.apiKey || String(firebaseConfig.apiKey).indexOf('PASTE') === 0;
@@ -25,12 +25,14 @@ if (!configMissing) {
   // نخزّن الصور في ذاكرة المتصفح بعد أول تحميل حتى لا تُحمَّل كل مرة (أسرع وأوفر).
   try {
     // اكتشاف تلقائي للاتصال البديل (long polling) للمتصفحات والشبكات التي تحجب الاتصال المستمر (مثل متصفحات الفلترة).
-    db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }), experimentalAutoDetectLongPolling: true });
+    db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager(), cacheSizeBytes: CACHE_SIZE_UNLIMITED }), experimentalAutoDetectLongPolling: true });
   } catch (e) {
     db = initializeFirestore(app, { localCache: memoryLocalCache(), experimentalAutoDetectLongPolling: true });
   }
 }
 
+// دون إنترنت: نقرأ من ذاكرة الجهاز مباشرة بدل انتظار الخادم
+const fromServer = (ref) => (typeof navigator !== 'undefined' && navigator.onLine === false) ? getDocFromCache(ref) : getDocFromServer(ref);
 const lower = (s) => String(s || '').trim().toLowerCase();
 
 /* ---------- السنة الدراسية: الأولى أو الثانية (كل سنة لها محتواها وطلبتها في مجموعات منفصلة) ---------- */
@@ -49,7 +51,7 @@ export function yearUrl(y) { return location.pathname + '?y=' + y + (location.ha
 export function switchYear(y) { try { localStorage.setItem('gueschemi.year', String(y)); } catch (e) {} location.href = yearUrl(y); }
 // هل الحساب مقبول في سنة معيّنة؟ (يُستعمل لتوجيه الطالب تلقائياً لسنته)
 export async function hasYear(email, y) {
-  try { const s = await getDocFromServer(doc(db, C('allowed', y), email)); return s.exists(); } catch (e) { return false; }
+  try { const s = await fromServer(doc(db, C('allowed', y), email)); return s.exists(); } catch (e) { return false; }
 }
 
 /* ---------- الدخول ---------- */
@@ -84,9 +86,9 @@ export function signOutUser() { return signOut(auth); }
 
 /* ---------- صلاحية الطالب ---------- */
 export async function getAccess(email) {
-  const adm = await getDocFromServer(doc(db, 'admins', email)).catch(() => getDoc(doc(db, 'admins', email)));
+  const adm = await fromServer(doc(db, 'admins', email)).catch(() => getDoc(doc(db, 'admins', email)));
   if (adm.exists()) return 'admin';
-  const al = await getDocFromServer(doc(db, C('allowed'), email)).catch(() => getDoc(doc(db, C('allowed'), email)));
+  const al = await fromServer(doc(db, C('allowed'), email)).catch(() => getDoc(doc(db, C('allowed'), email)));
   if (al.exists()) return 'allowed';
   const rq = await getDoc(doc(db, C('requests'), email));
   return rq.exists() ? 'pending' : 'none';
@@ -105,8 +107,8 @@ export async function sendRequest(user) {
 export async function loadManifest(id) {
   const ref = doc(db, C('content'), id || 'manifest');
   // من الخادم دائماً (مع محاولة ثانية)، ولا نرجع للنسخة المحفوظة إلا دون إنترنت.
-  const s = await getDocFromServer(ref)
-    .catch(() => new Promise((r) => setTimeout(r, 1500)).then(() => getDocFromServer(ref)))
+  const s = await fromServer(ref)
+    .catch(() => new Promise((r) => setTimeout(r, 1500)).then(() => fromServer(ref)))
     .catch(() => getDoc(ref));
   if (!s.exists()) return null;
   return JSON.parse(s.data().json);
@@ -117,6 +119,15 @@ export function watchManifest(cb, id) {
   try {
     return onSnapshot(doc(db, C('content'), id || 'manifest'), (s) => { if (s.exists() && !s.metadata.fromCache) { try { cb(JSON.parse(s.data().json)); } catch (e) {} } }, () => {});
   } catch (e) { return () => {}; }
+}
+
+// تحميل وثيقة إلى ذاكرة الجهاز للاستعمال دون إنترنت (بلا حفظ في الذاكرة المؤقتة للصفحة)
+export async function cacheDoc(id) {
+  const ref = doc(db, C('content'), 'img_' + id);
+  let s = null, hit = true;
+  try { s = await getDocFromCache(ref); } catch (e) { hit = false; s = await fromServer(ref); }
+  if (!s.exists()) return { d: '', hit: hit };
+  return { d: s.data().d || '', hit: hit };
 }
 
 // الصور ثابتة (رقم النسخة داخل المعرّف)، فنقرؤها من ذاكرة المتصفح أولاً.
@@ -135,7 +146,7 @@ export function getImage(id) {
 
 /* ---------- تقدّم الطالب (يتبعه على كل أجهزته) ---------- */
 export async function loadProgress(email) {
-  const s = await getDocFromServer(doc(db, C('progress'), email));
+  const s = await fromServer(doc(db, C('progress'), email));
   return s.exists() ? s.data().json : null;
 }
 
@@ -146,7 +157,7 @@ export async function saveProgress(email, json) {
 /* ---------- ملاحظات الطالب على الدرس PDF (خاصة به، لكل فصل وثيقة) ---------- */
 export async function loadNotes(email, cid) {
   const ref = doc(db, C('notes'), lower(email), 'ch', String(cid));
-  const s = await getDocFromServer(ref).catch(() => getDoc(ref));
+  const s = await fromServer(ref).catch(() => getDoc(ref));
   return s.exists() ? s.data().json : null;
 }
 export async function saveNotes(email, cid, json) {
@@ -164,9 +175,19 @@ export async function saveMedia(email, id, d) {
   await setDoc(doc(db, C('notesm'), lower(email), 'm', id), { d: d, updatedAt: serverTimestamp() });
 }
 
+/* ---------- محادثات Gemini لكل طالب (سجلّه الخاص) ---------- */
+export async function listChats(email) {
+  const s = await getDocs(query(collection(db, 'aichat', lower(email), 'c'), orderBy('updatedAt', 'desc'), limit(40)));
+  return s.docs.map((d) => d.data().json).filter(Boolean);
+}
+export async function saveChat(email, id, json) {
+  await setDoc(doc(db, 'aichat', lower(email), 'c', id), { json: json, updatedAt: serverTimestamp() });
+}
+export async function delChat(email, id) { await deleteDoc(doc(db, 'aichat', lower(email), 'c', id)); }
+
 /* ---------- الأجهزة (جهازان كحد أقصى لكل حساب) ---------- */
 export async function getDevices(email) {
-  const s = await getDocFromServer(doc(db, 'devices', email));
+  const s = await fromServer(doc(db, 'devices', email));
   return s.exists() ? s.data() : null;
 }
 
@@ -238,7 +259,7 @@ export const DEFAULT_SUBJECTS = [{ key: 'gen', doc: 'manifest', en: 'General Che
 export async function loadSubjects() {
   const ref = doc(db, C('content'), 'subjects');
   let s = null;
-  try { s = await getDocFromServer(ref); } catch (e) { try { s = await getDoc(ref); } catch (e2) { s = null; } }
+  try { s = await fromServer(ref); } catch (e) { try { s = await getDoc(ref); } catch (e2) { s = null; } }
   if (!s || !s.exists()) return YEAR === 2 ? [] : DEFAULT_SUBJECTS.slice();
   const DEF = YEAR === 2 ? [] : DEFAULT_SUBJECTS.slice();
   try { const L = JSON.parse(s.data().json); return Array.isArray(L) && L.length ? L : DEF; } catch (e) { return DEF; }

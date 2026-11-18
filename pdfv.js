@@ -253,7 +253,11 @@ export function mountPdf(root, o) {
     const L = data.p[p.k] || [];
     for (let k = 0; k < 8 && L.some((q) => !q.pts && Math.abs(q.x - s.x) < 600 && Math.abs(q.y - s.y) < 600); k++) { s.x = Math.max(0, Math.min(10000 - s.w, s.x + 700)); s.y = Math.max(0, Math.min(9200, s.y + 700)); }
   }
-  function addObj(s) { const p = pages[cur]; if (!p) return; placeObj(p, s); const op = { pg: p.k, add: [s], del: [] }; apply(op, false); commit(op); }
+  function addObj(s) {
+    const p = pages[cur]; if (!p) return; placeObj(p, s); const op = { pg: p.k, add: [s], del: [] }; apply(op, false); commit(op);
+    if (st.tool) setTool('');   // وضع اليد حتى يستطيع تحريكه وتكبيره مباشرة
+    requestAnimationFrame(() => { const el = [...p.lay.children].find((x) => x._s === s); if (el) selectObj(p, el); });
+  }
   function objEl(p, s) {
     const el = document.createElement('div'); el.className = 'pvobj pv-' + s.t; el._s = s;
     el.style.left = s.x / 100 + '%'; el.style.top = s.y / 100 + '%'; el.style.width = s.w / 100 + '%';
@@ -274,7 +278,14 @@ export function mountPdf(root, o) {
       }
       el.appendChild(g);
     }
-    el.addEventListener('pointerdown', (e) => { if (st.tool && st.tool !== 'lasso') return; e.stopPropagation(); selectObj(p, el); });
+    el.addEventListener('pointerdown', (e) => {
+      if (st.tool && st.tool !== 'lasso') return; e.stopPropagation();
+      if (!objSel || objSel.el !== el) { selectObj(p, el); if (!e.target.closest('textarea,.pvplay')) { el._down(e); } return; }
+      el._down(e);
+    });
+    el.addEventListener('pointermove', (e) => { if (el._move) el._move(e); });
+    el.addEventListener('pointerup', (e) => { if (el._up) el._up(e); });
+    el.addEventListener('pointercancel', (e) => { if (el._up) el._up(e); });
     return el;
   }
   function fmtDur(t) { t = Math.round(t); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); }
@@ -288,8 +299,9 @@ export function mountPdf(root, o) {
     objSel = { p: p, el: el, s: el._s };
     el.classList.add('sel');
     const h = document.createElement('div'); h.className = 'pvobjbar';
-    h.innerHTML = '<span class="mv" title="تحريك">✥</span><button type="button" data-o="del" title="حذف">' + I.trash + '</button>';
+    h.innerHTML = '<span class="mv" title="تحريك">✥</span><button type="button" class="sz" data-o="smaller" title="تصغير">−</button><button type="button" class="sz" data-o="bigger" title="تكبير">+</button><button type="button" data-o="del" title="حذف">' + I.trash + '</button>';
     el.appendChild(h);
+    if (el.offsetTop < 44) h.style.top = 'calc(100% + 10px)';   // في أعلى الصفحة: الشريط تحت العنصر حتى لا يُخفى
     const rz = document.createElement('span'); rz.className = 'pvrz'; rz.title = 'تكبير/تصغير'; el.appendChild(rz);
     h.querySelector('[data-o="del"]').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); const s = objSel.s, pg = p.k; deselectObj(); const op = { pg: pg, add: [], del: [s] }; apply(op, false); commit(op); });
     const drag = (mode) => (e) => {
@@ -313,8 +325,37 @@ export function mountPdf(root, o) {
     };
     h.querySelector('.mv').addEventListener('pointerdown', drag('m'));
     rz.addEventListener('pointerdown', drag('r'));
+    // تكبير/تصغير بالأزرار (10% كل ضغطة)
+    const resizeTo = (w) => {
+      const s = objSel.s, r = p.fig.getBoundingClientRect();
+      w = Math.round(Math.max(800, Math.min(10000, w)));
+      const ns = Object.assign({}, s, { w: w, x: Math.max(0, Math.min(10000 - w, s.x)) });
+      if (s.h && s.t === 'i') ns.h = Math.round(s.h * w / s.w);
+      else if (s.h && s.t !== 'tb') ns.h = s.h;
+      if (ns.h) ns.y = Math.max(0, Math.min(10000 - ns.h, s.y));
+      el.style.width = ns.w / 100 + '%'; el.style.left = ns.x / 100 + '%'; el.style.top = ns.y / 100 + '%'; if (ns.h) el.style.height = ns.h / 100 + '%';
+      const L = items(p.k), k = L.indexOf(s); if (k < 0) return;
+      L[k] = ns; el._s = ns; objSel.s = ns; commit({ pg: p.k, add: [ns], del: [s] });
+    };
+    h.querySelectorAll('.sz').forEach((b) => b.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); resizeTo(objSel.s.w * (b.dataset.o === 'bigger' ? 1.12 : 0.89)); }));
+    // سحب العنصر نفسه لتحريكه، وإصبعان لتكبيره (مثل Samsung Notes)
+    const ptrs = new Map(); let pinch = null;
+    el._down = (e) => {
+      if (e.target.closest('.pvobjbar,.pvrz,textarea,.pvplay')) return;
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, w: objSel.s.w }; return; }
+      drag('m')(e);
+    };
+    el._move = (e) => {
+      if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch && ptrs.size === 2) { const [a, b] = [...ptrs.values()]; const w = Math.max(800, Math.min(10000, pinch.w * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d)); el.style.width = w / 100 + '%'; if (objSel.s.t === 'i' && objSel.s.h) el.style.height = (objSel.s.h * w / objSel.s.w) / 100 + '%'; }
+    };
+    el._up = (e) => {
+      ptrs.delete(e.pointerId);
+      if (pinch && ptrs.size < 2) { const w = parseFloat(el.style.width) * 100; pinch = null; resizeTo(w); }
+    };
   }
-  function deselectObj() { if (!objSel) return; const el = objSel.el; el.classList.remove('sel'); el.querySelectorAll('.pvobjbar,.pvrz').forEach((x) => x.remove()); objSel = null; }
+  function deselectObj() { if (!objSel) return; const el = objSel.el; el.classList.remove('sel'); el.querySelectorAll('.pvobjbar,.pvrz').forEach((x) => x.remove()); el._down = el._move = el._up = null; objSel = null; }
   document.addEventListener('pointerdown', (e) => { if (objSel && !e.target.closest('.pvobj')) deselectObj(); }, true);
 
   function shrinkImage(file) {
@@ -443,11 +484,51 @@ export function mountPdf(root, o) {
     ta.style.left = (s.x / 100) + '%'; ta.style.top = (s.y / 100) + '%';
     ta.style.color = p.dark && !stick && DARK(s.c) ? '#f3f4f6' : s.c; ta.style.fontSize = 'calc(var(--pw) * ' + (s.z / 1000) + ')';
     if (sel && sel.pg === p.k && sel.set.has(s)) ta.classList.add('selx');
-    const fit = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; ta.style.width = 'auto'; ta.style.width = Math.min(p.fig.clientWidth * (1 - s.x / 10000) - 4, Math.max(60, measure(ta) + 18)) + 'px'; };
-    ta.addEventListener('input', () => { s.s = ta.value; fit(); touch(); });
-    ta.addEventListener('blur', () => { if (!(s.s || '').trim()) { const L = items(p.k); const k = L.indexOf(s); if (k >= 0) { L.splice(k, 1); touch(); } ta.remove(); } });
-    ta._s = s; requestAnimationFrame(fit);
+    const fit = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; ta.style.width = 'auto'; ta.style.width = Math.min(p.fig.clientWidth * (1 - ta._s.x / 10000) - 4, Math.max(60, measure(ta) + 18)) + 'px'; };
+    ta.addEventListener('input', () => { ta._s.s = ta.value; fit(); touch(); });
+    ta.addEventListener('blur', () => { const s1 = ta._s; if (!(s1.s || '').trim()) { const L = items(p.k); const k = L.indexOf(s1); if (k >= 0) { L.splice(k, 1); touch(); } ta.remove(); } });
+    ta._s = s; ta._fit = fit; requestAnimationFrame(fit);
+    ta.addEventListener('focus', () => textBar(p, ta));
+    ta.addEventListener('blur', () => setTimeout(() => { if (TBAR && TBAR._ta === ta && document.activeElement !== ta) hideTBar(); }, 150));
     return ta;
+  }
+  /* شريط صغير فوق النص: تصغير/تكبير الخط، تحريك، حذف */
+  let TBAR = null;
+  function hideTBar() { if (TBAR) { TBAR.remove(); TBAR = null; } }
+  function textBar(p, ta) {
+    hideTBar();
+    const b = document.createElement('div'); b.className = 'pvtbar'; b._ta = ta;
+    b.innerHTML = '<span class="mv" title="تحريك">✥</span><button type="button" data-t="-" title="تصغير الخط">A−</button><output></output><button type="button" data-t="+" title="تكبير الخط">A+</button><button type="button" data-t="del" title="حذف">' + I.trash + '</button>';
+    const pos = () => {
+      b.style.left = 'min(' + ta.style.left + ', calc(100% - 190px))';
+      b.style.top = ta.offsetTop < 44 ? (ta.offsetTop + ta.offsetHeight + 6) + 'px' : (ta.offsetTop - 40) + 'px';   // فوق النص، أو تحته إن كان في أعلى الصفحة
+      b.querySelector('output').textContent = ta._s.z;
+    };
+    pos(); p.lay.appendChild(b); TBAR = b;
+    const setZ = (z) => {
+      const s0 = ta._s, L = items(p.k), k = L.indexOf(s0); if (k < 0) return;
+      const ns = Object.assign({}, s0, { z: Math.max(6, Math.min(60, z)) }); if (ns.z === s0.z) return;
+      L[k] = ns; ta._s = ns; ta.style.fontSize = 'calc(var(--pw) * ' + (ns.z / 1000) + ')'; ta._fit(); pos();
+      commit({ pg: p.k, add: [ns], del: [s0] });
+    };
+    b.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();   // يبقى النص مفتوحاً للكتابة
+      const t = e.target.closest('[data-t],.mv'); if (!t) return;
+      if (t.dataset.t === '-') setZ(ta._s.z - 2);
+      else if (t.dataset.t === '+') setZ(ta._s.z + 2);
+      else if (t.dataset.t === 'del') { const s0 = ta._s; hideTBar(); const op = { pg: p.k, add: [], del: [s0] }; if (items(p.k).indexOf(s0) >= 0) { apply(op, false); commit(op); } }
+      else if (t.classList.contains('mv')) {
+        const r = p.fig.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY, s0 = ta._s;
+        const mv = (ev) => { ta.style.left = Math.max(0, Math.min(9500, s0.x + (ev.clientX - x0) / r.width * 10000)) / 100 + '%'; ta.style.top = Math.max(0, Math.min(9800, s0.y + (ev.clientY - y0) / r.height * 10000)) / 100 + '%'; pos(); };
+        const up = () => {
+          window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up);
+          const ns = Object.assign({}, s0, { x: Math.round(parseFloat(ta.style.left) * 100), y: Math.round(parseFloat(ta.style.top) * 100) });
+          const L = items(p.k), k = L.indexOf(s0); if (k < 0 || (ns.x === s0.x && ns.y === s0.y)) return;
+          L[k] = ns; ta._s = ns; ta._fit(); commit({ pg: p.k, add: [ns], del: [s0] }); ta.focus();
+        };
+        window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+      }
+    });
   }
   const mctx = document.createElement('canvas').getContext('2d');
   function measure(ta) { const cs = getComputedStyle(ta); mctx.font = cs.fontSize + ' ' + cs.fontFamily; return Math.max.apply(null, ta.value.split('\n').map((l) => mctx.measureText(l || ' ').width)); }
@@ -484,7 +565,7 @@ export function mountPdf(root, o) {
     } else if (t === 'text') {
       h += rng('tz', st.tz, 8, 40) + sw(PEN_COLS, st.tc, 'tc') +
         '<p class="pvnl" style="margin-top:14px">خلفية النص <small>(ملصق ملوّن مثل Sticky note)</small></p><div class="pvtbs">' + STICK.map((c) => '<button type="button" class="pvtb' + ((st.tb || '') === c[0] ? ' on' : '') + '" data-tb="' + c[0] + '" style="' + (c[0] ? 'background:' + c[0] : '') + '">' + c[1] + '</button>').join('') + '</div>' +
-        '<p class="pvhint">اضغط على الصفحة في المكان الذي تريد الكتابة فيه.</p>';
+        '<p class="pvhint">اضغط على الصفحة في المكان الذي تريد الكتابة فيه. لتغيير حجم نص مكتوب: اضغط عليه ثم <b>A−</b> أو <b>A+</b>.</p>';
     }
     POP.innerHTML = h; POP.dataset.for = t; POP.hidden = false;
   }
@@ -778,8 +859,13 @@ export function mountPdf(root, o) {
     else SAVE.textContent = s || '';
     SAVE.dataset.s = s;
   }
+  // نسخة احتياطية على الجهاز: لا يضيع شيء حتى بلا إنترنت أو إن فشل الحفظ في الحساب
+  const BK = 'gueschemi.pvn.' + (o.uid || '') + '.' + ch.id;
+  let cloudOK = false, lastTs = 0;
+  function backup(j) { try { localStorage.setItem(BK, j); } catch (e) {} }
   function pack() {
-    const out = { v: 1, p: {} };
+    lastTs = Date.now();
+    const out = { v: 1, ts: lastTs, p: {} };
     if (data.x && Object.keys(data.x).length) out.x = data.x;
     Object.keys(data.p).forEach((k) => { const L = data.p[k].filter((s) => s.t !== 'x' || (s.s || '').trim()); if (L.length) out.p[k] = L; });
     return JSON.stringify(out);
@@ -790,19 +876,47 @@ export function mountPdf(root, o) {
     if (saving) { saveT = setTimeout(flush, 800); return; }
     const j = pack();
     if (j.length > MAXJ) { status('full'); return; }
+    backup(j);
+    if (!cloudOK) { status('📱 محفوظ على هذا الجهاز'); return; }   // لم نقرأ نسخة الحساب بعد: لا نكتب فوقها
     saving = true; dirty = false;
     try { await o.saveNotes(ch.id, j); if (!dirty) status('ok'); }
-    catch (e) { dirty = true; status('err'); if (!dead) saveT = setTimeout(flush, 5000); }
+    catch (e) { dirty = true; status('📱 محفوظ على الجهاز، سأرفعه لحسابك'); if (!dead) saveT = setTimeout(flush, 5000); }
     saving = false;
   }
-  o.loadNotes(ch.id).then((j) => {
-    if (dead) return;
-    if (j) { try { const d = JSON.parse(j); if (d && d.p) data = d; } catch (e) {} }
-    loaded = true;
-    if (data.x && Object.keys(data.x).length) { build(); restoreStart(); }
+  function parse(j) { try { const d = JSON.parse(j); return d && d.p ? d : null; } catch (e) { return null; } }
+  function applyData(d) {
+    data = d;
+    build(); restoreStart();
     pages.forEach((p) => { if (p.on) { renderBase(p); blit(p); renderTexts(p); } });
-    if (dirty) touch();
-  }).catch(() => { loaded = true; status('err'); });
+  }
+  // 1) نعرض فوراً ما على الجهاز  2) نقارن مع نسخة الحساب ونأخذ الأحدث
+  let local = null; try { local = parse(localStorage.getItem(BK) || ''); } catch (e) {}
+  const seen = new Set(); if (local) Object.keys(local.p).forEach((k) => local.p[k].forEach((it) => seen.add(it)));   // ما كان محفوظاً قبل هذه الجلسة
+  if (local) { loaded = true; setTimeout(() => { if (!dead && !cloudOK) applyData(local); }, 0); }
+  function loadCloud() {
+    o.loadNotes(ch.id).then((j) => {
+      if (dead) return;
+      const cl = j ? parse(j) : null;
+      const lt = local ? (local.ts || 0) : -1, ct = cl ? (cl.ts || 1) : 0;
+      cloudOK = true; loaded = true;
+      if (cl && ct >= lt) {
+        // نسخة الحساب أحدث: نأخذها، ونضيف إليها ما كتبه الطالب قبل اكتمال التحميل
+        if (dirty) {
+          Object.keys(data.p).forEach((k) => { const add = data.p[k].filter((it) => !seen.has(it)); if (add.length) cl.p[k] = (cl.p[k] || []).concat(add); });
+          if (data.x) { cl.x = cl.x || {}; Object.keys(data.x).forEach((k) => { const have = (cl.x[k] || []).map((n) => n.id); cl.x[k] = (cl.x[k] || []).concat(data.x[k].filter((n) => have.indexOf(n.id) < 0)); }); }
+        }
+        applyData(cl);
+        if (dirty) touch(); else { backup(j); status('ok'); }
+      }
+      else if (local) { if (data !== local && !dirty) applyData(local); dirty = true; touch(); }   // تعديلات الجهاز أحدث من الحساب: نرفعها
+      else if (dirty) touch();
+    }).catch(() => {
+      if (dead) return;
+      loaded = true; status(local ? '📱 محفوظ على هذا الجهاز' : '');
+      setTimeout(() => { if (!dead && !cloudOK) loadCloud(); }, 10000);   // نعيد المحاولة
+    });
+  }
+  loadCloud();
 
   /* ---------- الصفحة الحالية والتكبير ---------- */
   const LK = 'gueschemi.pvpage.' + ch.id;

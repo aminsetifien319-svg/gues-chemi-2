@@ -2,11 +2,11 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing,
-  YEAR, YEAR_EXPLICIT, YEAR_AR, YEAR_EN, hasYear, switchYear, loadNotes, saveNotes, loadMedia, saveMedia
-} from './firebase.js?v=74';
-import { mountPdf } from './pdfv.js?v=74';
-import { fmt, typeset } from './rich.js?v=74';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=74';
+  YEAR, YEAR_EXPLICIT, YEAR_AR, YEAR_EN, hasYear, switchYear, loadNotes, saveNotes, loadMedia, saveMedia, listChats, saveChat, delChat, cacheDoc
+} from './firebase.js?v=77';
+import { mountPdf } from './pdfv.js?v=77';
+import { fmt, typeset } from './rich.js?v=77';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=77';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -223,7 +223,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 74;
+const APP_V = 77;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -848,7 +848,7 @@ function chapter(ch) {
   VIEW.innerHTML = '<div class="chero' + (isCov(ch) ? ' cov' : '') + '" style="--c:var(--c' + ch.id + ')">' + (isCov(ch) ? bgDiv(ch.cover, 'chero-bg') : '<div class="chart-bg">' + chArt(ch, 'art big') + '</div>') + '<div class="wrap chero-in"><div class="ctext"><nav class="crumb inv"><a href="#/">الرئيسية</a><span>›</span><b>CH ' + cn(ch) + '</b></nav>' +
     '<p class="kick lat">Chapter ' + cn(ch) + '</p><h1><span class="lat">' + esc(ch.en) + '</span><span class="ar">' + esc(ch.ar) + '</span></h1><p class="tp lat">' + esc(ch.topics) + '</p>' +
     (ch.share != null ? '<div class="chips"><span><b class="lat">' + ch.share + '%</b> من أسئلة الامتحان</span><span>الترتيب <b class="lat">#' + ch.rank + '</b></span><span><b class="lat">' + ch.app + '</b> ظهوراً في الامتحانات</span></div>' : '<div class="chips"><span><b class="lat">' + FLOW[ch.id].length + '</b> صفحة</span><span><b class="lat">' + ch.qcm.reduce((a, x) => a + x.q.length, 0) + '</b> سؤال كيسيام</span></div>') +
-    '<p class="acts"><a class="btn pri" href="#/c/' + ch.id + '/p/' + FLOW[ch.id][0].n + '">' + (s.read ? 'تابع الدروس' : 'ابدأ الدرس') + ' ←</a><a class="btn ghost" href="#/c/' + ch.id + '/q/official">كيسيام الامتحانات</a>' + (ch.pdf && ch.pdf.length ? '<a class="btn ghost" href="#/c/' + ch.id + '/pdf">📄 الدرس كاملاً PDF</a>' : '') + (ch.info ? '<a class="btn ghost" href="#/c/' + ch.id + '/info">▦ الملخص في صورة</a>' : '') + '</p></div>' +
+    '<p class="acts"><a class="btn pri" href="#/c/' + ch.id + '/p/' + FLOW[ch.id][0].n + '">' + (s.read ? 'تابع الدروس' : 'ابدأ الدرس') + ' ←</a><a class="btn ghost" href="#/c/' + ch.id + '/q/official">كيسيام الامتحانات</a>' + (ch.pdf && ch.pdf.length ? '<a class="btn ghost" href="#/c/' + ch.id + '/pdf">📄 الدرس كاملاً PDF</a>' : '') + (ch.info ? '<a class="btn ghost" href="#/c/' + ch.id + '/info">▦ الملخص في صورة</a>' : '') + dlBtn(ch) + '</p></div>' +
     '<div class="ccover' + (ch.ratio ? ' tall' : '') + '">' + fig(ch.cover, 'cover', ch.ratio || '16 / 9') + '</div></div></div>' +
     '<div class="wrap"><div class="cprog card"><div class="ov"><span>الدروس المقروءة</span><span class="pbar"><i style="width:' + pct(s.read, s.pages) + '%"></i></span><b class="lat">' + s.read + '/' + s.pages + '</b></div>' +
     '<div class="ov"><span>الكيسيام المحلول</span><span class="pbar"><i style="width:' + pct(s.qa, s.qn) + '%"></i></span><b class="lat">' + s.qa + '/' + s.qn + '</b></div></div>' +
@@ -893,13 +893,67 @@ async function aiCtx(question) {
   if (question && T) c.more = lessonSearch(T, question, skip);
   return c;
 }
+/* ---------- الدراسة دون إنترنت: تحميل درس كامل إلى الجهاز ---------- */
+const DLK = (ch) => 'gueschemi.dl.' + YEAR + '.' + ch.id;
+function dlState(ch) { try { return JSON.parse(localStorage.getItem(DLK(ch)) || 'null'); } catch (e) { return null; } }
+function dlBtn(ch) {
+  const st = dlState(ch), fresh = st && st.b === (ch.build || '') && st.ok;
+  return '<button type="button" class="btn ghost dlb' + (fresh ? ' done' : '') + '" data-act="dl" data-ch="' + ch.id + '">' + (fresh ? '✓ محمّل للدراسة دون إنترنت' : st ? '⬇ حدّث النسخة المحمّلة' : '⬇ تحميل للدراسة دون إنترنت') + '</button>';
+}
+const DL_KEYS = { img: 1, imgs: 1, cover: 1, art: 1, info: 1, text: 1, stext: 1, flash: 1, pdf: 1, pdfT: 1 };
+const DL_RX = /\bx[a-z]{0,4}\d*[a-z0-9]*_[a-z0-9_]+\b/g;
+let DLRUN = null;
+async function downloadCh(ch, btn) {
+  if (DLRUN) return;
+  if (!navigator.onLine) { btn.textContent = '⚠ تحتاج الإنترنت للتحميل'; return; }
+  DLRUN = ch.id;
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+  const todo = [], seen = new Set();
+  const add = (id) => { if (typeof id === 'string' && id.indexOf('_') > 0 && !seen.has(id) && id.length < 80) { seen.add(id); todo.push(id); } };
+  (function walk(o, k) {
+    if (Array.isArray(o)) o.forEach((x) => walk(x, k));
+    else if (o && typeof o === 'object') Object.keys(o).forEach((kk) => walk(o[kk], kk));
+    else if (typeof o === 'string' && (DL_KEYS[k] || /^x[a-z]{0,4}\d*[a-z0-9]*_[a-z0-9_]+$/.test(o))) add(o);
+  })(ch, '');
+  let done = 0, fail = 0, bytes = 0, i = 0;
+  const show = () => { if (btn.isConnected) btn.textContent = '⬇ جارٍ التحميل… ' + done + '/' + todo.length + ' (' + Math.round(bytes / 1048576) + ' MB)'; };
+  show();
+  async function worker() {
+    while (i < todo.length) {
+      const id = todo[i++];
+      try {
+        const r = await cacheDoc(id);
+        bytes += r.d.length;
+        if (r.d && r.d.slice(0, 5) !== 'data:') (r.d.match(DL_RX) || []).forEach(add);   // صور داخل نصوص الدرس
+      } catch (e) { fail++; }
+      done++; if (done % 3 === 0 || done === todo.length) show();
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  // ملفات الموقع نفسها (حتى يفتح دون إنترنت)
+  try { await Promise.all(['pdfv.js', 'ai.js', 'rich.js', 'art.js', 'katex.min.js', 'katex.min.css', 'katex-auto-render.min.js', 'katex-mhchem.min.js'].map((f) => fetch(f + (f.indexOf('katex') === 0 ? '' : '?v=' + APP_V)).catch(() => {}))); } catch (e) {}
+  const ok = fail === 0 || fail < todo.length * 0.02;
+  try { localStorage.setItem(DLK(ch), JSON.stringify({ b: ch.build || '', ok: ok, t: now(), n: todo.length, mb: Math.round(bytes / 1048576) })); } catch (e) {}
+  DLRUN = null;
+  if (btn.isConnected) { btn.outerHTML = dlBtn(ch); }
+  toast(ok ? '✓ حُمّل الدرس (' + Math.round(bytes / 1048576) + ' MB). يمكنك دراسته دون إنترنت.' : '⚠ لم يكتمل التحميل (' + fail + ' ملف). أعد المحاولة بإنترنت أفضل.');
+}
+/* شريط «دون إنترنت» */
+function netBar() {
+  let b = document.getElementById('gcnet');
+  if (navigator.onLine) { if (b) b.remove(); return; }
+  if (!b) { b = document.createElement('div'); b.id = 'gcnet'; b.textContent = '📴 أنت دون إنترنت — تعمل الدروس التي حمّلتها أو فتحتها سابقاً، وتُحفظ ملاحظاتك وتقدّمك على الجهاز ثم تُرفع لاحقاً.'; document.body.appendChild(b); }
+}
+window.addEventListener('online', netBar); window.addEventListener('offline', netBar); netBar();
+
 /* مساعد Gemini: يُحمَّل عند أول ضغطة فقط */
 let aiOn = false;
 function startAI() {
   if (aiOn) return; aiOn = true;
-  import('./ai.js?v=74').then((m) => m.mountAI({
+  import('./ai.js?v=77').then((m) => m.mountAI({
     email: () => (me && me.email) || '',
-    getCtx: aiCtx
+    getCtx: aiCtx,
+    listChats: () => listChats(me.email), saveChat: (id, j) => saveChat(me.email, id, j), delChat: (id) => delChat(me.email, id)
   })).catch(() => { aiOn = false; });
 }
 /* الدرس PDF: الصفحات صور محمية + أدوات كتابة، والملاحظات تُحفظ في حساب الطالب */
@@ -907,7 +961,7 @@ function pdfPage(ch, i) {
   if (!readP('f' + ch.id)) { prog.r['f' + ch.id] = now(); save(); }
   VIEW.innerHTML = '<div class="pvwrap"></div>';
   PDFV = mountPdf(VIEW.firstChild, {
-    ch: ch, start: i, esc: esc, wm: watermark, getImage: getImage,
+    ch: ch, start: i, esc: esc, wm: watermark, getImage: getImage, uid: me.email,
     loadNotes: (cid) => loadNotes(me.email, cid), saveNotes: (cid, j) => saveNotes(me.email, cid, j),
     loadMedia: (id) => loadMedia(me.email, id), saveMedia: (id, d) => saveMedia(me.email, id, d)
   });
@@ -1576,6 +1630,7 @@ document.addEventListener('click', async (e) => {
     else if (act === 'logout') { if (unwatch) { unwatch(); unwatch = null; } pendingM = null; if (pushTimer) await push(); clearInterval(tick); quizSel = {}; revRes = {}; revLists = {}; IDX = null; Object.keys(TXT).forEach((k) => delete TXT[k]); Object.keys(FCD).forEach((k) => delete FCD[k]); Object.keys(FCARDS).forEach((k) => delete FCARDS[k]); FS = null; wmUrl = ''; ready = false; cloud = 'off'; await signOutUser(); }
     else if (act === 'request') { a.disabled = true; try { await sendRequest(me); gPending(me); } catch (err) { gError(friendly(err)); } }
     else if (act === 'recheck') onUser(me);
+    else if (act === 'dl') { const ch = [].concat(...Object.values(MS || {}).map((m) => m.chapters || [])).find((c) => String(c.id) === a.dataset.ch) || (M && M.chapters.find((c) => String(c.id) === a.dataset.ch)); if (ch) downloadCh(ch, a); }
     else if (act === 'swapdev') { if (confirm('استبدال هذا الجهاز بالجهاز الحالي؟ لن تتمكن من استبدال آخر قبل ' + SWAP_DAYS + ' يوماً.')) swapDevice(a.dataset.id); }
     else if (act === 'aiq') { if (window.__gcAsk) window.__gcAsk(null, 'اشرح لي هذا السؤال: ما المطلوب، ولماذا كل اقتراح صحيح أو خاطئ، اعتماداً على الدرس.'); }
     else if (act === 'update') { a.disabled = true; try { if (pushTimer) await push(); } catch (e2) {} location.reload(); }

@@ -1,10 +1,9 @@
 // مساعد Gemini داخل الموقع (Firebase AI Logic · Gemini Developer API).
 // يعمل في نسخة Firebase منفصلة (12.x) حتى لا يمسّ باقي الموقع: إن فشل، يبقى الموقع سليماً.
-import * as CFG from './firebase-config.js?v=74';
+import * as CFG from './firebase-config.js?v=77';
 
 const V = '12.12.1';
 const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-3-flash-preview'];
-const DAILY = 30;
 const SYS = 'أنت «مساعد Gues Chemi»، أستاذ مساعد لطلبة السنة الأولى صيدلة في الجزائر. ' +
   'القاعدة الأهم: الدرس هو المرجع الأول. مع كل سؤال يصلك «نص الدرس» و«مقتطفات من الدرس»: ابنِ جوابك عليها أولاً، واستعمل نفس تعريفاتها وأرقامها ومصطلحاتها حتى لو كانت تختلف عمّا تعرفه، لأن الطالب يُمتحن على درسه. ' +
   'إن لم يكن الجواب موجوداً في نص الدرس، فقل صراحة: «هذا غير مذكور في الدرس، ومن معلوماتي العامة:» ثم أجب بحذر. لا تخلط بين ما في الدرس وما من معرفتك دون تمييز. ' +
@@ -76,16 +75,55 @@ function md(t) {   // تنسيق بسيط وآمن: عناوين، خط عريض
 
 export function mountAI(o) {
   if (document.getElementById('gcai')) return;
-  const dayKey = () => 'gueschemi.ai.' + (o.email() || '') + '.' + new Date().toISOString().slice(0, 10);
-  const used = () => { try { return +localStorage.getItem(dayKey()) || 0; } catch (e) { return 0; } };
-  const use = () => { try { localStorage.setItem(dayKey(), String(used() + 1)); } catch (e) {} };
+  /* ---- سجلّ المحادثات: محفوظ على الجهاز وفي حساب الطالب ---- */
+  const LKEY = () => 'gueschemi.aichats.' + (o.email() || '');
+  let CH = [];          // [{id, ti, t, m:[{r:'u'|'b', x, q?, l?}]}] الأحدث أولاً
+  let cur = null;       // المحادثة الحالية
+  const keepLocal = () => { try { localStorage.setItem(LKEY(), JSON.stringify(CH.slice(0, 30))); } catch (e) { try { localStorage.setItem(LKEY(), JSON.stringify(CH.slice(0, 8))); } catch (x) {} } };
+  try { CH = JSON.parse(localStorage.getItem(LKEY()) || '[]') || []; } catch (e) { CH = []; }
+  const synced = (async () => {
+    if (!o.listChats) return;
+    try {
+      const L = (await o.listChats()).map((j) => { try { return JSON.parse(j); } catch (e) { return null; } }).filter((c) => c && c.id);
+      const by = {}; CH.concat(L).forEach((c) => { if (!by[c.id] || (c.t || 0) > (by[c.id].t || 0)) by[c.id] = c; });
+      CH = Object.values(by).sort((a, b) => (b.t || 0) - (a.t || 0)).slice(0, 40); keepLocal();
+      // ما حُفظ على الجهاز فقط (بلا إنترنت سابقاً) نرفعه الآن
+      const ids = {}; L.forEach((c) => { ids[c.id] = c.t; });
+      CH.forEach((c) => { if (ids[c.id] !== c.t) push(c); });
+    } catch (e) {}
+  })();
+  function push(c) { if (!o.saveChat) return; let j = JSON.stringify(c); while (j.length > 290000 && c.m.length > 2) { c.m = c.m.slice(2); j = JSON.stringify(c); } o.saveChat(c.id, j).catch(() => {}); }
+  function record(u, b, q, l) {
+    if (!cur) { cur = { id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ti: u.slice(0, 70), t: 0, m: [] }; CH.unshift(cur); }
+    cur.m.push({ r: 'u', x: u.slice(0, 4000), q: q ? q.slice(0, 600) : undefined, l: l || undefined }, { r: 'b', x: b.slice(0, 12000) });
+    if (cur.m.length > 80) cur.m = cur.m.slice(-80);
+    cur.t = Date.now();
+    CH = [cur].concat(CH.filter((c) => c !== cur && c.id !== cur.id)).slice(0, 40);
+    keepLocal(); push(cur);
+  }
+  function showConv(c) {
+    reset(); cur = c;
+    c.m.forEach((x) => { if (x.r === 'u') bubble('me', (x.q ? '<blockquote>' + esc(x.q) + '</blockquote>' : '') + '<p>' + esc(x.x) + '</p>' + (x.l ? '<small class="ailbl">' + esc(x.l) + '</small>' : '')); else bubble('bot', md(x.x)); });
+    // نعيد للنموذج آخر الأسئلة والأجوبة (بلا نص الدرس؛ يُرسل الدرس من جديد مع السؤال القادم)
+    hist = c.m.slice(-16).map((x) => ({ role: x.r === 'u' ? 'user' : 'model', parts: [{ text: x.x }] }));
+    lastCtxKey = '';
+  }
+  function histView() {
+    const H = $('.aihist');
+    if (!H.hidden) { H.hidden = true; return; }
+    H.innerHTML = '<p class="aihh"><b>🕘 محادثاتك السابقة</b><button type="button" class="aix" data-ai="hclose" aria-label="رجوع">✕</button></p>' +
+      (CH.length ? CH.map((c) => '<div class="aihi' + (c === cur ? ' on' : '') + '"><button type="button" data-ai="hopen" data-id="' + esc(c.id) + '"><b>' + esc(c.ti || 'محادثة') + '</b><small>' + new Date(c.t || 0).toLocaleString('fr-DZ', { dateStyle: 'short', timeStyle: 'short' }) + ' · ' + Math.ceil((c.m || []).length / 2) + ' سؤال</small></button><button type="button" class="aidel" data-ai="hdel" data-id="' + esc(c.id) + '" aria-label="حذف">🗑</button></div>').join('')
+        : '<p class="small">لا توجد محادثات بعد. أسئلتك وأجوبة Gemini تُحفظ هنا تلقائياً.</p>');
+    H.style.top = P.querySelector('header').offsetHeight + 'px'; H.hidden = false;
+  }
 
   const root = document.createElement('div'); root.id = 'gcai';
   root.innerHTML = '<button type="button" class="aifab" aria-label="اسأل Gemini" title="اسأل Gemini عن الدرس"><span>✨</span><b>اسأل Gemini</b></button>' +
     '<section class="aipanel" hidden role="dialog" aria-label="مساعد Gemini">' +
-    '<header><div><b>✨ مساعد Gemini</b><small class="aictx"></small></div><button type="button" class="aix" data-ai="new" title="محادثة جديدة">↺</button><button type="button" class="aix" data-ai="close" aria-label="إغلاق">✕</button></header>' +
+    '<header><div><b>✨ مساعد Gemini</b><small class="aictx"></small></div><button type="button" class="aix" data-ai="hist" title="محادثاتي السابقة">🕘</button><button type="button" class="aix" data-ai="new" title="محادثة جديدة">↺</button><button type="button" class="aix" data-ai="close" aria-label="إغلاق">✕</button></header>' +
     '<div class="aimsgs"><div class="aiwel"><p>اسألني عن أي شيء في الدرس: شرح فكرة، تلخيص صفحة، الفرق بين مفهومين، أو لماذا جواب كيسيام صحيح.</p>' +
     '<div class="aisugg"><button type="button" data-q="اشرح لي هذه الصفحة ببساطة">اشرح هذه الصفحة</button><button type="button" data-q="لخّص لي هذه الصفحة في نقاط قصيرة">لخّص الصفحة</button><button type="button" data-q="اطرح عليّ 3 أسئلة كيسيام عن هذه الصفحة مع الحل">اختبرني</button></div></div></div>' +
+    '<div class="aihist" hidden></div>' +
     '<div class="aiquote" hidden><span></span><button type="button" data-ai="unquote" aria-label="إزالة">✕</button></div>' +
     '<form class="aiform"><textarea rows="1" placeholder="اكتب سؤالك…" dir="auto"></textarea><button type="submit" aria-label="إرسال">➤</button></form>' +
     '<p class="ainote">قد يخطئ Gemini أحياناً: تحقّق دائماً من الدرس. <span class="aileft"></span></p><p class="airc">محمي بـ reCAPTCHA وتنطبق <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">سياسة الخصوصية</a> و<a href="https://policies.google.com/terms" target="_blank" rel="noopener">شروط الخدمة</a> من Google.</p></section>';
@@ -102,13 +140,16 @@ export function mountAI(o) {
     $('.aisugg').innerHTML = (SUG[c.kind] || SUG.def).map((x) => '<button type="button" data-q="' + esc(x[1]) + '">' + esc(x[0]) + '</button>').join('');
     $('.aileft').textContent = '';
   }
+  let first = true;
   function open(q, ask) {
     P.hidden = false; root.classList.add('on'); refreshHead();
+    // أول فتح: نكمل آخر محادثة إن كانت خلال 12 ساعة
+    if (first) { first = false; const go = () => { if (!cur && !M.querySelector('.aim') && CH[0] && Date.now() - (CH[0].t || 0) < 432e5) showConv(CH[0]); }; go(); synced.then(go); }
     if (q) { quote = q.slice(0, 600); Q.hidden = false; Q.querySelector('span').textContent = '«' + quote + '»'; }
     if (ask) send(ask); else setTimeout(() => TA.focus(), 50);
   }
   function close() { P.hidden = true; root.classList.remove('on'); }
-  function reset() { hist = []; lastCtxKey = ''; M.querySelectorAll('.aim').forEach((x) => x.remove()); M.querySelector('.aiwel').hidden = false; }
+  function reset() { hist = []; lastCtxKey = ''; cur = null; $('.aihist').hidden = true; M.querySelectorAll('.aim').forEach((x) => x.remove()); M.querySelector('.aiwel').hidden = false; }
   function bubble(cls, html) { const d = document.createElement('div'); d.className = 'aim ' + cls; d.innerHTML = html; M.appendChild(d); M.querySelector('.aiwel').hidden = true; M.scrollTop = M.scrollHeight; return d; }
 
   let extQ = '', extShort = '';
@@ -131,16 +172,16 @@ export function mountAI(o) {
     if (c.more) prompt += 'مقتطفات أخرى من الدرس قد تفيد في الجواب:\n"""\n' + c.more + '\n"""\n\n';
     if (quote) prompt += 'الجزء الذي حدّده الطالب من الدرس:\n"' + quote + '"\n\n';
     prompt += 'سؤال الطالب: ' + text;
-    quote = ''; Q.hidden = true;
+    const q0 = quote; quote = ''; Q.hidden = true;
     // نسخة كاملة للسؤال لاستعمالها في Gemini الخارجي إن تعذّر المساعد
     extQ = 'أنا طالب سنة أولى صيدلة. أجبني بالعربية مع المصطلحات بالفرنسية، واعتمد على نص الدرس أولاً.\n\n' +
       (c.label ? 'الدرس: ' + c.label + '\n' : '') + (c.text ? 'نص الدرس:\n"""\n' + c.text.slice(0, 6000) + '\n"""\n\n' : '') +
-      (c.more ? 'مقتطفات أخرى:\n"""\n' + c.more.slice(0, 2000) + '\n"""\n\n' : '') + (quote ? 'الجزء المحدد: "' + quote + '"\n\n' : '') + 'سؤالي: ' + text;
-    extShort = (c.label ? c.label + ' — ' : '') + (quote ? '«' + quote.slice(0, 300) + '» ' : '') + text;
+      (c.more ? 'مقتطفات أخرى:\n"""\n' + c.more.slice(0, 2000) + '\n"""\n\n' : '') + (q0 ? 'الجزء المحدد: "' + q0 + '"\n\n' : '') + 'سؤالي: ' + text;
+    extShort = (c.label ? c.label + ' — ' : '') + (q0 ? '«' + q0.slice(0, 300) + '» ' : '') + text;
     const out = bubble('bot', '<p class="aiwait">… يكتب</p>');
     try {
-      await streamAsk(prompt, (acc) => { out.innerHTML = md(acc); M.scrollTop = M.scrollHeight; });
-      use(); refreshHead();
+      const ans = await streamAsk(prompt, (acc) => { out.innerHTML = md(acc); M.scrollTop = M.scrollHeight; });
+      record(text, ans || '', q0, c.label);
     } catch (e) {
       const m = String(e && (e.message || e));
       lastCtxKey = '';
@@ -161,6 +202,15 @@ export function mountAI(o) {
     const b = e.target.closest('[data-ai],[data-q]'); if (!b) return;
     if (b.dataset.ai === 'close') close();
     else if (b.dataset.ai === 'new') reset();
+    else if (b.dataset.ai === 'hist') histView();
+    else if (b.dataset.ai === 'hclose') $('.aihist').hidden = true;
+    else if (b.dataset.ai === 'hopen') { const c = CH.find((x) => x.id === b.dataset.id); if (c) showConv(c); }
+    else if (b.dataset.ai === 'hdel') {
+      if (b.dataset.arm !== '1') { b.dataset.arm = '1'; b.textContent = 'حذف؟'; setTimeout(() => { if (b.isConnected) { b.dataset.arm = ''; b.textContent = '🗑'; } }, 3000); return; }
+      const id = b.dataset.id; CH = CH.filter((x) => x.id !== id); keepLocal(); if (o.delChat) o.delChat(id).catch(() => {});
+      if (cur && cur.id === id) reset();
+      $('.aihist').hidden = true; histView();
+    }
     else if (b.dataset.ai === 'unquote') { quote = ''; Q.hidden = true; }
     else if (b.dataset.ai === 'ext') {
       copyText(extQ);

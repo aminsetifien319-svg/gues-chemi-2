@@ -1419,14 +1419,25 @@ body.pdfmode #gcai{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .pvrz{width:30px;height:30px;right:-13px;bottom:-13px}
 .pvrz::after{content:"";position:absolute;inset:-10px}
 .pvobj.sel{cursor:move}
-.pvtbar{position:absolute;z-index:6;display:flex;align-items:center;gap:3px;background:#1f2328;border-radius:9px;padding:3px;box-shadow:0 4px 12px rgba(0,0,0,.3);pointer-events:auto;touch-action:none}
-.pvtbar button,.pvtbar .mv{display:grid;place-items:center;min-width:34px;height:30px;border:0;border-radius:7px;background:transparent;color:#fff;font:800 15px Outfit,sans-serif;cursor:pointer}
-.pvtbar .mv{cursor:move;font-size:17px}
-.pvtbar button[data-t="del"]{color:#fca5a5}
-.pvtbar svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.pvtbar output{color:#93c5fd;font:700 12px Outfit,sans-serif;min-width:20px;text-align:center}
+.pvzbar{position:absolute;z-index:6;display:flex;align-items:center;gap:3px;background:#1f2328;border-radius:9px;padding:3px;box-shadow:0 4px 12px rgba(0,0,0,.3);pointer-events:auto;touch-action:none}
+.pvzbar button,.pvzbar .mv{display:grid;place-items:center;min-width:34px;height:30px;border:0;border-radius:7px;background:transparent;color:#fff;font:800 15px Outfit,sans-serif;cursor:pointer}
+.pvzbar .mv{cursor:move;font-size:17px}
+.pvzbar button[data-t="del"]{color:#fca5a5}
+.pvzbar svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.pvzbar output{color:#93c5fd;font:700 12px Outfit,sans-serif;min-width:20px;text-align:center}
 .chip.dlall{background:#0ea5e9;border-color:transparent;color:#fff;font-weight:700;white-space:nowrap}
 .chip.dlall.done{background:transparent;border-color:#22c55e;color:#86efac}
 .chip.dlall.run{background:#0369a1;animation:dlp 1.6s ease-in-out infinite}
 @keyframes dlp{50%{opacity:.7}}
 @media (max-width:420px){.chip.dlall .wd{display:none}}
+/* ملء الشاشة للدرس PDF */
+.pvfs{flex:none;display:grid;place-items:center;width:38px;height:36px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);cursor:pointer}
+.pvfs svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.pvfs .out,.pvfs.on .in{display:none}.pvfs.on .out{display:inline}
+.pvfs.on{background:#2563eb;border-color:#2563eb;color:#fff}
+body.pvfull .top,body.pvfull .side,body.pvfull .scrim,body.pvfull .foot,body.pvfull footer,body.pvfull #updbar{display:none!important}
+body.pvfull .shell{min-height:100vh}
+body.pvfull .main{margin:0!important;padding:0!important;max-width:none!important;width:100%}
+body.pvfull .pvtop{top:0;padding-top:max(6px,env(safe-area-inset-top,0px))}
+body.pvfull .pvback,body.pvfull .pvttl{display:none}
+@media (max-width:380px){.pvnew .tx{display:none}.pvnew{padding:0 8px}.pvfs{width:34px;height:34px}.pvsel{max-width:76px}}

@@ -7,7 +7,7 @@ import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, CACHE_SIZE_UNLIMITED,
   doc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch, query, orderBy, limit
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-import * as CFG from './firebase-config.js?v=78';
+import * as CFG from './firebase-config.js?v=79';
 const firebaseConfig = CFG.firebaseConfig;
 
 export const configMissing = !firebaseConfig.apiKey || String(firebaseConfig.apiKey).indexOf('PASTE') === 0;

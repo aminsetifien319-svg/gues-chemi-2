@@ -46,7 +46,8 @@ export function mountPdf(root, o) {
     '<select class="pvsel" data-pv="page" dir="ltr" aria-label="الصفحة"></select>' +
     '<button type="button" class="pvnew pvpaste" data-pv="paste" hidden>📋 لصق</button>' +
     '<button type="button" class="pvnew" data-pv="new" title="إضافة صفحة فارغة خاصة بك بعد الصفحة الحالية لتكتب فيها ملاحظاتك"><span class="pl">＋</span><span class="tx">صفحة ملاحظات</span></button>' +
-    '<select class="pvsel" data-pv="zoom" aria-label="التكبير">' + ZOOMS.map((z) => '<option value="' + z[0] + '"' + (z[0] === st.zoom ? ' selected' : '') + '>' + z[1] + '</option>').join('') + '</select></div>' +
+    '<select class="pvsel" data-pv="zoom" aria-label="التكبير">' + ZOOMS.map((z) => '<option value="' + z[0] + '"' + (z[0] === st.zoom ? ' selected' : '') + '>' + z[1] + '</option>').join('') + '</select>' +
+    '<button type="button" class="pvfs" data-pv="full" aria-label="ملء الشاشة" title="ملء الشاشة (Plein écran)"><svg viewBox="0 0 24 24"><path class="in" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><path class="out" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button></div>' +
     '<div class="pvscroll"><div class="pvdoc" style="--pz:' + st.zoom + '"></div></div>' +
     '<div class="pvpop" hidden></div>' +
     '<div class="pvbar" role="toolbar" aria-label="أدوات الكتابة">' +
@@ -497,7 +498,7 @@ export function mountPdf(root, o) {
   function hideTBar() { if (TBAR) { TBAR.remove(); TBAR = null; } }
   function textBar(p, ta) {
     hideTBar();
-    const b = document.createElement('div'); b.className = 'pvtbar'; b._ta = ta;
+    const b = document.createElement('div'); b.className = 'pvzbar'; b._ta = ta;
     b.innerHTML = '<span class="mv" title="تحريك">✥</span><button type="button" data-t="-" title="تصغير الخط">A−</button><output></output><button type="button" data-t="+" title="تكبير الخط">A+</button><button type="button" data-t="del" title="حذف">' + I.trash + '</button>';
     const pos = () => {
       b.style.left = 'min(' + ta.style.left + ', calc(100% - 190px))';
@@ -920,7 +921,7 @@ export function mountPdf(root, o) {
 
   /* ---------- الصفحة الحالية والتكبير ---------- */
   const LK = 'gueschemi.pvpage.' + ch.id;
-  function topOff() { return (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--top')) || 56) + $('.pvtop').offsetHeight + 8; }
+  function topOff() { const t = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--top')); return (isNaN(t) ? 56 : t) + $('.pvtop').offsetHeight + 8; }
   function goPage(i, smooth) { const f = pages[i].fig; const y = f.getBoundingClientRect().top + window.scrollY - topOff(); window.scrollTo({ top: y, behavior: smooth ? 'smooth' : 'auto' }); }
   let scT = 0;
   function onScroll() {
@@ -975,8 +976,35 @@ export function mountPdf(root, o) {
     return { label: ch.en + ' · ' + ch.ar + ' · صفحة ' + (p.li + 1) + ' / ' + N, text: L, key: 'pdf' + ch.id + '_' + p.li + (L ? 't' : ''), kind: 'pdf', ch: ch };
   };
   loadTX();
+  /* ---------- ملء الشاشة (Plein écran) ---------- */
+  // على Android والحاسوب وiPad: ملء الشاشة الحقيقي. على iPhone (لا يسمح Safari بذلك): نخفي كل شيء ما عدا الدرس.
+  const FSB = $('[data-pv="full"]');
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  function setFull(on) {
+    document.body.classList.toggle('pvfull', on); FSB.classList.toggle('on', on);
+    document.documentElement.style.setProperty('--top', on ? '0px' : '');
+    FSB.setAttribute('aria-label', on ? 'الخروج من ملء الشاشة' : 'ملء الشاشة');
+    const k = cur; requestAnimationFrame(() => goPage(k, false));
+  }
+  async function toggleFull() {
+    const on = !document.body.classList.contains('pvfull');
+    if (on) {
+      setFull(true);
+      const d = document.documentElement, rq = d.requestFullscreen || d.webkitRequestFullscreen;
+      if (rq) { try { await rq.call(d, { navigationUI: 'hide' }); } catch (e) {} }
+    } else {
+      setFull(false);
+      if (fsEl()) { try { await (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) {} }
+    }
+  }
+  const onFsChange = () => { if (!fsEl() && document.body.classList.contains('pvfull') && FS_REAL) setFull(false); FS_REAL = !!fsEl(); };
+  let FS_REAL = false;
+  FSB.addEventListener('click', toggleFull);
+  document.addEventListener('fullscreenchange', onFsChange); document.addEventListener('webkitfullscreenchange', onFsChange);
   return function destroy() {
     window.__gcPdfCtx = null;
+    document.removeEventListener('fullscreenchange', onFsChange); document.removeEventListener('webkitfullscreenchange', onFsChange);
+    if (document.body.classList.contains('pvfull')) { document.body.classList.remove('pvfull'); document.documentElement.style.removeProperty('--top'); if (fsEl()) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) {} } }
     flush();
     dead = true;
     io.disconnect(); ro.disconnect();

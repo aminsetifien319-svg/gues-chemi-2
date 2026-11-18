@@ -2,10 +2,11 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing,
-  YEAR, YEAR_EXPLICIT, YEAR_AR, YEAR_EN, hasYear, switchYear
-} from './firebase.js?v=54';
-import { fmt, typeset } from './rich.js?v=54';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=54';
+  YEAR, YEAR_EXPLICIT, YEAR_AR, YEAR_EN, hasYear, switchYear, loadNotes, saveNotes
+} from './firebase.js?v=58';
+import { mountPdf } from './pdfv.js?v=58';
+import { fmt, typeset } from './rich.js?v=58';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=58';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -20,6 +21,7 @@ const SR_DAYS = [1, 2, 4, 8, 16];
 const EXAM_MAX = { 20: 30, 40: 60, 60: 90, 80: 120, 100: 150 };   // minutes
 const PERQ = [30, 60, 90, 120, 150, 180, 240, 300];                 // seconds per question
 
+let PDFV = null;
 let me = null, isAdmin = false, M = null, prog = null, KEY = '', ready = false;
 let FLOW = {}, ITEMS = {}, SETKEYS = {};
 let quizSel = {}, revRes = {}, revLists = {};
@@ -215,7 +217,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 54;
+const APP_V = 58;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -367,6 +369,7 @@ function parse() {
     if (h[2] === 'p') { const i = FLOW[ch.id].findIndex((p) => String(p.n) === h[3]); if (i >= 0) return { v: 'page', ch: ch, i: i }; }
     if (h[2] === 'q') { const set = ch.qcm.find((s) => s.key === h[3]); if (set) return { v: 'quiz', ch: ch, set: set, i: Math.max(0, Math.min(set.q.length - 1, n(h[4]) - 1)) }; }
     if (h[2] === 'info' && ch.info) return { v: 'info', ch: ch };
+    if (h[2] === 'pdf' && ch.pdf && ch.pdf.length) return { v: 'pdf', ch: ch, i: h[3] ? n(h[3]) - 1 : null };
     return { v: 'chapter', ch: ch };
   }
   return { v: 'home' };
@@ -379,11 +382,14 @@ function router() {
   if (updPending && safeNow()) { updPending = false; if (pushTimer) push(); location.reload(); return; }
   if (pendingM && safeNow()) { const pm = pendingM; pendingM = null; applyManifest(pm.key, pm.nm); return; }
   CUR = null; renderId++;
+  if (PDFV) { try { PDFV(); } catch (e) {} PDFV = null; }
+  document.body.classList.toggle('pdfmode', r.v === 'pdf');
   if (r.v === 'home') home();
   else if (r.v === 'stats') stats();
   else if (r.v === 'chapter') chapter(r.ch);
   else if (r.v === 'page') page(r.ch, r.i);
   else if (r.v === 'info') infoPage(r.ch);
+  else if (r.v === 'pdf') pdfPage(r.ch, r.i);
   else if (r.v === 'quiz') practice(r);
   else if (r.v === 'mistakes') mistakes();
   else if (r.v === 'fav') favorites();
@@ -764,20 +770,29 @@ function chapter(ch) {
   VIEW.innerHTML = '<div class="chero' + (isCov(ch) ? ' cov' : '') + '" style="--c:var(--c' + ch.id + ')">' + (isCov(ch) ? bgDiv(ch.cover, 'chero-bg') : '<div class="chart-bg">' + chArt(ch, 'art big') + '</div>') + '<div class="wrap chero-in"><div class="ctext"><nav class="crumb inv"><a href="#/">الرئيسية</a><span>›</span><b>CH ' + cn(ch) + '</b></nav>' +
     '<p class="kick lat">Chapter ' + cn(ch) + '</p><h1><span class="lat">' + esc(ch.en) + '</span><span class="ar">' + esc(ch.ar) + '</span></h1><p class="tp lat">' + esc(ch.topics) + '</p>' +
     (ch.share != null ? '<div class="chips"><span><b class="lat">' + ch.share + '%</b> من أسئلة الامتحان</span><span>الترتيب <b class="lat">#' + ch.rank + '</b></span><span><b class="lat">' + ch.app + '</b> ظهوراً في الامتحانات</span></div>' : '<div class="chips"><span><b class="lat">' + FLOW[ch.id].length + '</b> صفحة</span><span><b class="lat">' + ch.qcm.reduce((a, x) => a + x.q.length, 0) + '</b> سؤال كيسيام</span></div>') +
-    '<p class="acts"><a class="btn pri" href="#/c/' + ch.id + '/p/' + FLOW[ch.id][0].n + '">' + (s.read ? 'تابع الدروس' : 'ابدأ الدرس') + ' ←</a><a class="btn ghost" href="#/c/' + ch.id + '/q/official">كيسيام الامتحانات</a>' + (ch.info ? '<a class="btn ghost" href="#/c/' + ch.id + '/info">▦ الملخص في صورة</a>' : '') + '</p></div>' +
+    '<p class="acts"><a class="btn pri" href="#/c/' + ch.id + '/p/' + FLOW[ch.id][0].n + '">' + (s.read ? 'تابع الدروس' : 'ابدأ الدرس') + ' ←</a><a class="btn ghost" href="#/c/' + ch.id + '/q/official">كيسيام الامتحانات</a>' + (ch.pdf && ch.pdf.length ? '<a class="btn ghost" href="#/c/' + ch.id + '/pdf">📄 الدرس كاملاً PDF</a>' : '') + (ch.info ? '<a class="btn ghost" href="#/c/' + ch.id + '/info">▦ الملخص في صورة</a>' : '') + '</p></div>' +
     '<div class="ccover' + (ch.ratio ? ' tall' : '') + '">' + fig(ch.cover, 'cover', ch.ratio || '16 / 9') + '</div></div></div>' +
     '<div class="wrap"><div class="cprog card"><div class="ov"><span>الدروس المقروءة</span><span class="pbar"><i style="width:' + pct(s.read, s.pages) + '%"></i></span><b class="lat">' + s.read + '/' + s.pages + '</b></div>' +
     '<div class="ov"><span>الكيسيام المحلول</span><span class="pbar"><i style="width:' + pct(s.qa, s.qn) + '%"></i></span><b class="lat">' + s.qa + '/' + s.qn + '</b></div></div>' +
     '<h2 class="h2">الدروس</h2><div class="secs">' + secs + '</div>' +
     '<h2 class="h2">الكيسيام</h2><div class="qgrid">' + qs + '</div>' +
     (nw ? '<p class="wrongline">لديك <b class="lat">' + nw + '</b> أخطاء في هذا الشابيطر. <a href="#/review/wrong' + ch.id + '/1">راجعها الآن ←</a></p>' : '') +
-    '<h2 class="h2">أدوات المراجعة</h2><div class="tgrid">' + (ch.info ? '<a class="tile inft" href="#/c/' + ch.id + '/info"><b>▦ الملخص في صورة</b><small>Infographic · كل الدرس في صفحة واحدة</small>' + (readP('i' + ch.id) ? '<i class="ck"></i>' : '') + '</a>' : '') + (ch.flash ? '<a class="tile fct" href="#/cards/' + ch.id + '"><b>❐ بطاقات المراجعة</b><small>Flashcards · ' + fcLine(ch) + '</small></a>' : '') + rev + '</div></div>';
+    '<h2 class="h2">أدوات المراجعة</h2><div class="tgrid">' + (ch.pdf && ch.pdf.length ? '<a class="tile pdft" href="#/c/' + ch.id + '/pdf"><b>📄 الدرس كاملاً PDF مع ملاحظاتك</b><small>الدرس والكيسيام والحلول · <span class="lat">' + ch.pdf.length + '</span> صفحة · اكتب وظلّل وتُحفظ ملاحظاتك</small>' + (readP('f' + ch.id) ? '<i class="ck"></i>' : '') + '</a>' : '') + (ch.info ? '<a class="tile inft" href="#/c/' + ch.id + '/info"><b>▦ الملخص في صورة</b><small>Infographic · كل الدرس في صفحة واحدة</small>' + (readP('i' + ch.id) ? '<i class="ck"></i>' : '') + '</a>' : '') + (ch.flash ? '<a class="tile fct" href="#/cards/' + ch.id + '"><b>❐ بطاقات المراجعة</b><small>Flashcards · ' + fcLine(ch) + '</small></a>' : '') + rev + '</div></div>';
   hydrate();
 }
 
 /* =================================================================
    صفحة الدرس (نص + صور توضيحية، أو الصفحة الأصلية)
    ================================================================= */
+/* الدرس PDF: الصفحات صور محمية + أدوات كتابة، والملاحظات تُحفظ في حساب الطالب */
+function pdfPage(ch, i) {
+  if (!readP('f' + ch.id)) { prog.r['f' + ch.id] = now(); save(); }
+  VIEW.innerHTML = '<div class="pvwrap"></div>';
+  PDFV = mountPdf(VIEW.firstChild, {
+    ch: ch, start: i, esc: esc, wm: watermark, getImage: getImage,
+    loadNotes: (cid) => loadNotes(me.email, cid), saveNotes: (cid, j) => saveNotes(me.email, cid, j)
+  });
+}
 /* الملخص البصري (Infographic): كل الدرس في صورة واحدة للمراجعة السريعة */
 function infoPage(ch) {
   if (!readP('i' + ch.id)) { prog.r['i' + ch.id] = now(); save(); }

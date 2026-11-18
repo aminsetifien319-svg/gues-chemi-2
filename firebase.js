@@ -7,7 +7,7 @@ import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache,
   doc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-import * as CFG from './firebase-config.js?v=54';
+import * as CFG from './firebase-config.js?v=58';
 const firebaseConfig = CFG.firebaseConfig;
 
 export const configMissing = !firebaseConfig.apiKey || String(firebaseConfig.apiKey).indexOf('PASTE') === 0;
@@ -141,6 +141,16 @@ export async function loadProgress(email) {
 
 export async function saveProgress(email, json) {
   await setDoc(doc(db, C('progress'), email), { json: json, updatedAt: serverTimestamp() });
+}
+
+/* ---------- ملاحظات الطالب على الدرس PDF (خاصة به، لكل فصل وثيقة) ---------- */
+export async function loadNotes(email, cid) {
+  const ref = doc(db, C('notes'), lower(email), 'ch', String(cid));
+  const s = await getDocFromServer(ref).catch(() => getDoc(ref));
+  return s.exists() ? s.data().json : null;
+}
+export async function saveNotes(email, cid, json) {
+  await setDoc(doc(db, C('notes'), lower(email), 'ch', String(cid)), { json: json, updatedAt: serverTimestamp() });
 }
 
 /* ---------- الأجهزة (جهازان كحد أقصى لكل حساب) ---------- */

@@ -7,7 +7,7 @@ import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache,
   doc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-import * as CFG from './firebase-config.js?v=72';
+import * as CFG from './firebase-config.js?v=74';
 const firebaseConfig = CFG.firebaseConfig;
 
 export const configMissing = !firebaseConfig.apiKey || String(firebaseConfig.apiKey).indexOf('PASTE') === 0;
@@ -170,13 +170,16 @@ export async function getDevices(email) {
   return s.exists() ? s.data() : null;
 }
 
-export async function addDevice(email, ids, info) {
-  await setDoc(doc(db, 'devices', email), { ids: ids, info: info, updatedAt: serverTimestamp() });
+export async function addDevice(email, ids, info, prev, swap) {
+  const o = { ids: ids, info: info, updatedAt: serverTimestamp() };
+  if (swap) o.swapAt = serverTimestamp();
+  else if (prev && prev.swapAt) o.swapAt = prev.swapAt;   // نحتفظ بتاريخ آخر استبدال كما هو
+  await setDoc(doc(db, 'devices', email), o);
 }
 
 export async function listDevices() {
   const s = await getDocs(collection(db, 'devices'));
-  return s.docs.map((d) => ({ email: d.id, ids: d.data().ids || [], info: d.data().info || {} }));
+  return s.docs.map((d) => ({ email: d.id, ids: d.data().ids || [], info: d.data().info || {}, swapAt: d.data().swapAt || null }));
 }
 
 export async function resetDevices(email) { await deleteDoc(doc(db, 'devices', lower(email))); }

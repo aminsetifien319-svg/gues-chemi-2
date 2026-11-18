@@ -3,10 +3,10 @@ import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing,
   YEAR, YEAR_EXPLICIT, YEAR_AR, YEAR_EN, hasYear, switchYear, loadNotes, saveNotes, loadMedia, saveMedia
-} from './firebase.js?v=72';
-import { mountPdf } from './pdfv.js?v=72';
-import { fmt, typeset } from './rich.js?v=72';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=72';
+} from './firebase.js?v=74';
+import { mountPdf } from './pdfv.js?v=74';
+import { fmt, typeset } from './rich.js?v=74';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=74';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -188,8 +188,14 @@ function gPending(u) {
 }
 function otherYearNote() { return OTHER_OK ? '<p class="small">حسابك مقبول في <b>' + OTHER_AR + '</b>: <a href="?y=' + OTHER_Y + '">افتح ' + OTHER_AR + ' ←</a></p>' : ''; }
 function gDevices(d) {
-  const list = (d && d.ids || []).map((id) => { const x = (d.info || {})[id] || {}; return '<li><b>' + esc(x.name || 'جهاز') + '</b> <small class="lat">' + (x.t ? new Date(x.t).toLocaleDateString('fr-DZ') : '') + '</small></li>'; }).join('');
-  gate('<h1>هذا الحساب مستعمل على جهازين</h1><p>كل حساب يعمل على <b>جهازين فقط</b>. هذا الجهاز ليس منهما:</p><ul class="devl">' + list + '</ul><p>إن غيّرت هاتفك أو حاسوبك، اطلب من المشرف «إعادة تعيين الأجهزة» لحسابك.</p>' +
+  const left = swapLeft(d), can = left === 0;
+  const list = (d && d.ids || []).map((id) => { const x = (d.info || {})[id] || {}; const seen = x.ls || x.t;
+    return '<li><b>' + esc(x.name || 'جهاز') + '</b> <small class="lat">' + (seen ? new Date(seen).toLocaleDateString('fr-DZ') : '') + '</small>' +
+      (can ? ' <button type="button" class="btn sm" data-act="swapdev" data-id="' + esc(id) + '">استبدله بهذا الجهاز</button>' : '') + '</li>'; }).join('');
+  gate('<h1>هذا الحساب مستعمل على جهازين</h1><p>كل حساب يعمل على <b>جهازين فقط</b>. هذا الجهاز (<b>' + esc(deviceName()) + '</b>) ليس منهما:</p><ul class="devl">' + list + '</ul>' +
+    (inApp() ? '<p class="err">أنت تفتح الموقع من داخل تطبيق (فيسبوك/ماسنجر/إنستغرام…). افتحه في متصفح الهاتف (Chrome أو Safari) من ⋮ ← «فتح في المتصفح».</p>' : '') +
+    (can ? '<p>إن كان هذا هاتفك أو حاسوبك الجديد، اضغط <b>«استبدله بهذا الجهاز»</b> بجانب الجهاز الذي لم تعد تستعمله. يمكنك فعل هذا مرة كل ' + SWAP_DAYS + ' يوماً.</p>'
+      : '<p>استبدلت جهازاً مؤخراً؛ يمكنك الاستبدال مرة أخرى بعد <b>' + Math.ceil(left / 864e5) + ' يوم</b>، أو اطلب من المشرف «إعادة تعيين الأجهزة».</p>') +
     acts('<button type="button" class="btn pri" data-act="recheck">تحقّق من جديد</button><button type="button" class="btn" data-act="logout">خروج</button>'));
 }
 function gError(msg, extra) {
@@ -217,7 +223,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 72;
+const APP_V = 74;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -252,28 +258,99 @@ setInterval(() => checkUpdate(false), 5 * 60000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(false); });
 
 /* ---------- الجهاز ---------- */
+const SWAP_DAYS = 15;   // الطالب يستبدل جهازاً بنفسه مرة كل 15 يوماً
+function getCookie(k) { const m = document.cookie.match(new RegExp('(?:^|; )' + k + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : ''; }
+function setCookie(k, v) { try { document.cookie = k + '=' + encodeURIComponent(v) + '; max-age=63072000; path=/; SameSite=Lax; Secure'; } catch (e) {} }
+function saveDeviceId(id) { try { localStorage.setItem('gueschemi.device', id); } catch (e) {} setCookie('gcdev', id); }
 function deviceId() {
   let id = '';
   try { id = localStorage.getItem('gueschemi.device') || ''; } catch (e) {}
-  if (!id) { id = 'd' + Math.random().toString(36).slice(2, 10) + now().toString(36); try { localStorage.setItem('gueschemi.device', id); } catch (e) {} }
+  if (!id) id = getCookie('gcdev');          // نسخة احتياطية إن مُسح التخزين
+  if (!id) id = 'd' + Math.random().toString(36).slice(2, 10) + now().toString(36);
+  saveDeviceId(id);
   return id;
 }
+function osName() {
+  const ua = navigator.userAgent || '';
+  if (/Android/i.test(ua)) return 'Android';
+  if (/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'iPhone/iPad';
+  if (/Windows/i.test(ua)) return 'Windows';
+  if (/Mac/i.test(ua)) return 'Mac';
+  if (/CrOS/.test(ua)) return 'Chromebook';
+  if (/Linux/i.test(ua)) return navigator.maxTouchPoints > 0 ? 'Android' : 'Linux';   // Chrome «نسخة سطح المكتب» على الهاتف
+  return 'جهاز';
+}
+function inApp() { const ua = navigator.userAgent || ''; return /FBAN|FBAV|FB_IAB|Instagram|Messenger|Line\/|MicroMessenger|TikTok|Snapchat|; wv\)/i.test(ua); }
 function deviceName() {
   const ua = navigator.userAgent || '';
-  const os = /Android/i.test(ua) ? 'Android' : /iPhone|iPad/i.test(ua) ? 'iPhone/iPad' : /Windows/i.test(ua) ? 'Windows' : /Mac/i.test(ua) ? 'Mac' : /Linux/i.test(ua) ? 'Linux' : 'جهاز';
-  const br = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : '';
-  return os + (br ? ' · ' + br : '');
+  const br = /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Edg/.test(ua) ? 'Edge' : /OPR\/|Opera/.test(ua) ? 'Opera' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : '';
+  return osName() + (inApp() ? ' · داخل تطبيق' : br ? ' · ' + br : '');
 }
+/* بصمة الجهاز نفسه (لا تتغيّر بتغيّر المتصفح أو مسح البيانات) */
+let FP = null;
+function gpuName() {
+  try {
+    const c = document.createElement('canvas'), g = c.getContext('webgl') || c.getContext('experimental-webgl');
+    if (!g) return '';
+    const x = g.getExtension('WEBGL_debug_renderer_info');
+    const r = String(x ? g.getParameter(x.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER) || '');
+    return r.replace(/ANGLE \(|\)|Direct3D.*$|OpenGL.*$|vs_.*$/gi, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  } catch (e) { return ''; }
+}
+function fingerprint() {
+  if (FP) return FP;
+  const w = screen.width || 0, h = screen.height || 0;
+  FP = [osName(), Math.min(w, h) + 'x' + Math.max(w, h), Math.round((window.devicePixelRatio || 1) * 100) / 100,
+    navigator.hardwareConcurrency || '', gpuName()].join('|');
+  return FP;
+}
+function sameDevice(a, b) {
+  if (!a || !b) return false;
+  const x = a.split('|'), y = b.split('|');
+  if (x[0] !== y[0] || x[1] !== y[1] || x[2] !== y[2]) return false;   // النظام + الشاشة + الكثافة
+  if (x[3] && y[3] && x[3] !== y[3]) return false;                    // عدد الأنوية
+  if (x[4] && y[4] && x[4] !== y[4]) return false;                    // معالج الرسوم
+  return true;
+}
+let DEV = null;   // آخر وثيقة أجهزة قرأناها
 async function checkDevice() {
-  const id = deviceId();
+  let id = deviceId();
+  const fp = fingerprint();
   let d = null;
   try { d = await getDevices(me.email); } catch (e) { return { ok: true }; }   // القواعد القديمة: لا نمنع
-  const ids = (d && d.ids) || [];
-  if (ids.indexOf(id) >= 0) return { ok: true };
+  DEV = d;
+  const ids = (d && d.ids) || [], info0 = (d && d.info) || {};
+  // نفس الجهاز بمتصفح آخر أو بعد مسح البيانات: نعيد له معرّفه القديم
+  if (ids.indexOf(id) < 0) {
+    const m = ids.find((x) => sameDevice((info0[x] || {}).fp, fp));
+    if (m) { id = m; saveDeviceId(m); }
+  }
+  if (ids.indexOf(id) >= 0) {
+    const x = info0[id] || {};
+    if (x.fp !== fp || !x.ls || now() - x.ls > 864e5) {   // نحدّث البصمة وآخر ظهور (مرة في اليوم)
+      const info = Object.assign({}, info0); info[id] = Object.assign({}, x, { name: deviceName(), fp: fp, ls: now() });
+      try { await addDevice(me.email, ids, info, d, false); } catch (e) {}
+    }
+    return { ok: true };
+  }
   if (ids.length >= 2) return { ok: false, d: d };
-  const info = Object.assign({}, (d && d.info) || {}); info[id] = { name: deviceName(), t: now() };
-  try { await addDevice(me.email, ids.concat([id]), info); } catch (e) { return { ok: false, d: d }; }
+  const info = Object.assign({}, info0); info[id] = { name: deviceName(), t: now(), ls: now(), fp: fp };
+  try { await addDevice(me.email, ids.concat([id]), info, d, false); } catch (e) { return { ok: false, d: d }; }
   return { ok: true };
+}
+function swapLeft(d) {
+  const t = d && d.swapAt && d.swapAt.toMillis ? d.swapAt.toMillis() : 0;
+  return Math.max(0, t + SWAP_DAYS * 864e5 - now());
+}
+async function swapDevice(oldId) {
+  const d = DEV; if (!d) return onUser(me);
+  const id = deviceId(), fp = fingerprint();
+  const ids = (d.ids || []).filter((x) => x !== oldId).concat([id]);
+  const info = {}; ids.forEach((x) => { if (d.info && d.info[x]) info[x] = d.info[x]; });
+  info[id] = { name: deviceName(), t: now(), ls: now(), fp: fp };
+  try { await addDevice(me.email, ids, info, d, true); }
+  catch (e) { return gError('تعذّر استبدال الجهاز. إن استبدلت جهازاً منذ أقل من ' + SWAP_DAYS + ' يوماً فانتظر، أو اطلب من المشرف «إعادة تعيين الأجهزة».'); }
+  onUser(me);
 }
 
 /* =================================================================
@@ -820,7 +897,7 @@ async function aiCtx(question) {
 let aiOn = false;
 function startAI() {
   if (aiOn) return; aiOn = true;
-  import('./ai.js?v=72').then((m) => m.mountAI({
+  import('./ai.js?v=74').then((m) => m.mountAI({
     email: () => (me && me.email) || '',
     getCtx: aiCtx
   })).catch(() => { aiOn = false; });
@@ -1499,6 +1576,7 @@ document.addEventListener('click', async (e) => {
     else if (act === 'logout') { if (unwatch) { unwatch(); unwatch = null; } pendingM = null; if (pushTimer) await push(); clearInterval(tick); quizSel = {}; revRes = {}; revLists = {}; IDX = null; Object.keys(TXT).forEach((k) => delete TXT[k]); Object.keys(FCD).forEach((k) => delete FCD[k]); Object.keys(FCARDS).forEach((k) => delete FCARDS[k]); FS = null; wmUrl = ''; ready = false; cloud = 'off'; await signOutUser(); }
     else if (act === 'request') { a.disabled = true; try { await sendRequest(me); gPending(me); } catch (err) { gError(friendly(err)); } }
     else if (act === 'recheck') onUser(me);
+    else if (act === 'swapdev') { if (confirm('استبدال هذا الجهاز بالجهاز الحالي؟ لن تتمكن من استبدال آخر قبل ' + SWAP_DAYS + ' يوماً.')) swapDevice(a.dataset.id); }
     else if (act === 'aiq') { if (window.__gcAsk) window.__gcAsk(null, 'اشرح لي هذا السؤال: ما المطلوب، ولماذا كل اقتراح صحيح أو خاطئ، اعتماداً على الدرس.'); }
     else if (act === 'update') { a.disabled = true; try { if (pushTimer) await push(); } catch (e2) {} location.reload(); }
     else if (act === 'install' && installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch (e2) {} installEvt = null; renderUser(); }

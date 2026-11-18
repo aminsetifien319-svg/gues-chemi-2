@@ -1401,3 +1401,5 @@ body.pdfmode #gcai{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .grecaptcha-badge{visibility:hidden!important;opacity:0!important;pointer-events:none!important}
 .airc{margin:0;padding:0 12px 8px;font-size:10px;color:var(--mut)}
 .airc a{color:inherit;text-decoration:underline}
+.aiext{display:flex;gap:6px;flex-wrap:wrap}.aiexth{color:var(--ok,#16a34a);font-size:13px}
+.aim.err .ainfo{color:var(--ink,inherit);font-weight:400;font-size:14px}

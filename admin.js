@@ -2,8 +2,8 @@
 import {
   watchUser, signIn, signOutUser, isAdminUser, listRequests, listAllowed,
   approve, reject, removeAllowed, addAllowed, authAgeHours, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, loadSubjects, saveSubjects, DEFAULT_SUBJECTS, configMissing, YEAR, YEAR_AR
-} from './firebase.js?v=72';
-import { mountEditor } from './editor.js?v=72';
+} from './firebase.js?v=74';
+import { mountEditor } from './editor.js?v=74';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const box = $('#box');
@@ -86,7 +86,9 @@ function progressCard(allowed, progress, devices) {
       '<td class="lat ' + (pc(s.ok, s.ans) >= 50 ? 'okc' : 'koc') + '">' + (s.ans ? pc(s.ok, s.ans) + '%' : '—') + '</td>' +
       '<td class="lat">' + (s.exams ? s.exams + ' · ' + s.best + '%' : '—') + '</td>' + dcell(st.email) + '</tr>';
   }).join('');
+  const full = (devices || []).filter((d) => d.ids.length >= 2).length;
   return '<div class="card"><h2>تقدّم الطلبة <small>Progress</small></h2>' +
+    ((devices || []).length ? '<p class="small">حسابات وصلت حدّ الجهازين: <b class="lat">' + full + '</b> · <button type="button" class="btn sm" data-a="resetall" data-label="إعادة تعيين أجهزة الجميع">إعادة تعيين أجهزة الجميع</button></p>' : '') +
     (allowed.length ? '<div class="tscroll"><table class="ptab"><thead><tr><th>الطالب</th><th>آخر نشاط</th><th>الدروس</th><th>الكيسيام</th><th>صحيح</th><th>امتحانات · أفضل</th><th>الأجهزة</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<p class="small">لا يوجد طلبة مقبولون بعد.</p>') + '</div>';
 }
 
@@ -280,6 +282,13 @@ document.addEventListener('click', async (e) => {
       note = msg.textContent; busy = false; try { await refresh(); } catch (e2) {} return;
     } catch (err) { msg.className = 'err'; msg.textContent = (err && err.message) || String(err); }
     busy = false; t.disabled = false; return;
+  }
+  const ra = t.closest('[data-a="resetall"]');
+  if (ra) {
+    if (armed !== ra) { armed = ra; ra.textContent = 'تأكيد؟ سيُعاد تسجيل جهاز كل طالب عند دخوله'; clearTimeout(armTimer); armTimer = setTimeout(() => { ra.textContent = ra.dataset.label; armed = null; }, 5000); return; }
+    armed = null; ra.disabled = true;
+    try { const L = await listDevices(); let n = 0; for (const d of L) { await resetDevices(d.email); n++; } note = '✓ أُعيد تعيين أجهزة ' + n + ' حساب'; } catch (err) { note = err.message || String(err); }
+    await refresh(); return;
   }
   const rd = t.closest('[data-a="resetdev"]');
   if (rd) {

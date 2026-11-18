@@ -1,6 +1,6 @@
 // مساعد Gemini داخل الموقع (Firebase AI Logic · Gemini Developer API).
 // يعمل في نسخة Firebase منفصلة (12.x) حتى لا يمسّ باقي الموقع: إن فشل، يبقى الموقع سليماً.
-import * as CFG from './firebase-config.js?v=72';
+import * as CFG from './firebase-config.js?v=74';
 
 const V = '12.12.1';
 const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-3-flash-preview'];
@@ -100,7 +100,7 @@ export function mountAI(o) {
   async function refreshHead() {
     const c = await ctx(); $('.aictx').textContent = c.block || c.label || 'Gues Chemi';
     $('.aisugg').innerHTML = (SUG[c.kind] || SUG.def).map((x) => '<button type="button" data-q="' + esc(x[1]) + '">' + esc(x[0]) + '</button>').join('');
-    $('.aileft').textContent = 'متبقٍّ اليوم: ' + Math.max(0, DAILY - used()) + '/' + DAILY;
+    $('.aileft').textContent = '';
   }
   function open(q, ask) {
     P.hidden = false; root.classList.add('on'); refreshHead();
@@ -111,9 +111,14 @@ export function mountAI(o) {
   function reset() { hist = []; lastCtxKey = ''; M.querySelectorAll('.aim').forEach((x) => x.remove()); M.querySelector('.aiwel').hidden = false; }
   function bubble(cls, html) { const d = document.createElement('div'); d.className = 'aim ' + cls; d.innerHTML = html; M.appendChild(d); M.querySelector('.aiwel').hidden = true; M.scrollTop = M.scrollHeight; return d; }
 
+  let extQ = '', extShort = '';
+  function copyText(t) {
+    const fb = () => { try { const a = document.createElement('textarea'); a.value = t; a.setAttribute('readonly', ''); a.style.cssText = 'position:fixed;top:0;opacity:0'; document.body.appendChild(a); a.select(); a.setSelectionRange(0, t.length); document.execCommand('copy'); a.remove(); } catch (e) {} };
+    try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).catch(fb); else fb(); } catch (e) { fb(); }
+  }
   async function send(text) {
     text = (text || '').trim(); if (!text || busy) return;
-    if (used() >= DAILY) { bubble('bot err', '<p>انتهت أسئلتك لهذا اليوم (' + DAILY + '). عُد غداً إن شاء الله.</p>'); return; }
+    // بلا حدّ يومي
     busy = true; TA.value = ''; TA.style.height = '';
     const c = await ctx(text);
     if (c.block) { bubble('bot err', '<p>' + esc(c.block) + '</p>'); busy = false; return; }
@@ -127,6 +132,11 @@ export function mountAI(o) {
     if (quote) prompt += 'الجزء الذي حدّده الطالب من الدرس:\n"' + quote + '"\n\n';
     prompt += 'سؤال الطالب: ' + text;
     quote = ''; Q.hidden = true;
+    // نسخة كاملة للسؤال لاستعمالها في Gemini الخارجي إن تعذّر المساعد
+    extQ = 'أنا طالب سنة أولى صيدلة. أجبني بالعربية مع المصطلحات بالفرنسية، واعتمد على نص الدرس أولاً.\n\n' +
+      (c.label ? 'الدرس: ' + c.label + '\n' : '') + (c.text ? 'نص الدرس:\n"""\n' + c.text.slice(0, 6000) + '\n"""\n\n' : '') +
+      (c.more ? 'مقتطفات أخرى:\n"""\n' + c.more.slice(0, 2000) + '\n"""\n\n' : '') + (quote ? 'الجزء المحدد: "' + quote + '"\n\n' : '') + 'سؤالي: ' + text;
+    extShort = (c.label ? c.label + ' — ' : '') + (quote ? '«' + quote.slice(0, 300) + '» ' : '') + text;
     const out = bubble('bot', '<p class="aiwait">… يكتب</p>');
     try {
       await streamAsk(prompt, (acc) => { out.innerHTML = md(acc); M.scrollTop = M.scrollHeight; });
@@ -137,7 +147,10 @@ export function mountAI(o) {
       out.className = 'aim bot err';
       out.innerHTML = '<p>' + (/quota|429|exhaust|rate/i.test(m) ? 'المساعد مشغول الآن (انتهت الحصة المؤقتة). حاول بعد قليل.' :
         /api-not-enabled|not been used|disabled|PERMISSION|403|app-check/i.test(m) ? 'المساعد غير مفعّل بعد في إعدادات الموقع. أخبر المشرف.' :
-        'تعذّر الاتصال بـ Gemini. تحقق من الإنترنت ثم أعد المحاولة.') + '</p><p class="aierr" dir="ltr">' + esc(m.slice(0, 220)) + '</p>';
+        'تعذّر الاتصال بـ Gemini. تحقق من الإنترنت ثم أعد المحاولة.') + '</p>' +
+        '<p class="ainfo">أكمل سؤالك الآن بحسابك في Gemini (مجاناً): الزر ينسخ سؤالك مع نص الدرس ثم يفتح Gemini، فاضغط مطوّلاً في خانة الكتابة ← <b>لصق</b> ← أرسل.</p><p class="aiext"><button type="button" class="btn sm pri" data-ai="ext">✨ انسخ وافتح Gemini</button> <button type="button" class="btn sm" data-ai="extg">🔎 Google AI</button></p>' +
+        '<p class="aiexth" hidden>✓ نُسخ — الصقه في Gemini.</p>' +
+        '<p class="aierr" dir="ltr">' + esc(m.slice(0, 220)) + '</p>';
       try { console.warn('[GuesAI]', m); } catch (x) {}
     }
     busy = false;
@@ -149,6 +162,12 @@ export function mountAI(o) {
     if (b.dataset.ai === 'close') close();
     else if (b.dataset.ai === 'new') reset();
     else if (b.dataset.ai === 'unquote') { quote = ''; Q.hidden = true; }
+    else if (b.dataset.ai === 'ext') {
+      copyText(extQ);
+      const h = b.closest('.aim') && b.closest('.aim').querySelector('.aiexth'); if (h) h.hidden = false;
+      window.open('https://gemini.google.com/app', '_blank', 'noopener');
+    }
+    else if (b.dataset.ai === 'extg') window.open('https://www.google.com/search?udm=50&q=' + encodeURIComponent(extShort.slice(0, 1500)), '_blank', 'noopener');
     else if (b.dataset.q) send(b.dataset.q);
   });
   $('.aiform').addEventListener('submit', (e) => { e.preventDefault(); send(TA.value); });

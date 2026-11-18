@@ -3,10 +3,10 @@ import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing,
   YEAR, YEAR_EXPLICIT, YEAR_AR, YEAR_EN, hasYear, switchYear, loadNotes, saveNotes, loadMedia, saveMedia, listChats, saveChat, delChat, cacheDoc
-} from './firebase.js?v=77';
-import { mountPdf } from './pdfv.js?v=77';
-import { fmt, typeset } from './rich.js?v=77';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=77';
+} from './firebase.js?v=78';
+import { mountPdf } from './pdfv.js?v=78';
+import { fmt, typeset } from './rich.js?v=78';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=78';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -215,6 +215,7 @@ function renderUser() {
   const ini = esc((me.name || me.email).trim().charAt(0).toUpperCase());
   u.innerHTML = (installEvt ? '<button type="button" class="chip inst" data-act="install">⤓ ثبّت التطبيق</button>' : '') +
     (isAdmin && ready ? '<a class="chip" href="admin.html?y=' + YEAR + '">الإدارة</a>' : '') +
+    (ready ? dlChip() : '') +
     '<span class="av" title="' + esc(me.email) + '">' + ini + '</span>' +
     '<button type="button" class="chip" data-act="logout">خروج</button>';
 }
@@ -223,7 +224,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 77;
+const APP_V = 78;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -903,21 +904,17 @@ function dlBtn(ch) {
 const DL_KEYS = { img: 1, imgs: 1, cover: 1, art: 1, info: 1, text: 1, stext: 1, flash: 1, pdf: 1, pdfT: 1 };
 const DL_RX = /\bx[a-z]{0,4}\d*[a-z0-9]*_[a-z0-9_]+\b/g;
 let DLRUN = null;
-async function downloadCh(ch, btn) {
-  if (DLRUN) return;
-  if (!navigator.onLine) { btn.textContent = '⚠ تحتاج الإنترنت للتحميل'; return; }
-  DLRUN = ch.id;
-  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+// يحمّل كل ملفات كائن (درس أو مادة) إلى ذاكرة الجهاز
+async function dlIds(obj, onProg) {
   const todo = [], seen = new Set();
   const add = (id) => { if (typeof id === 'string' && id.indexOf('_') > 0 && !seen.has(id) && id.length < 80) { seen.add(id); todo.push(id); } };
   (function walk(o, k) {
     if (Array.isArray(o)) o.forEach((x) => walk(x, k));
     else if (o && typeof o === 'object') Object.keys(o).forEach((kk) => walk(o[kk], kk));
     else if (typeof o === 'string' && (DL_KEYS[k] || /^x[a-z]{0,4}\d*[a-z0-9]*_[a-z0-9_]+$/.test(o))) add(o);
-  })(ch, '');
+  })(obj, '');
   let done = 0, fail = 0, bytes = 0, i = 0;
-  const show = () => { if (btn.isConnected) btn.textContent = '⬇ جارٍ التحميل… ' + done + '/' + todo.length + ' (' + Math.round(bytes / 1048576) + ' MB)'; };
-  show();
+  if (onProg) onProg(done, todo.length, bytes);
   async function worker() {
     while (i < todo.length) {
       const id = todo[i++];
@@ -926,17 +923,67 @@ async function downloadCh(ch, btn) {
         bytes += r.d.length;
         if (r.d && r.d.slice(0, 5) !== 'data:') (r.d.match(DL_RX) || []).forEach(add);   // صور داخل نصوص الدرس
       } catch (e) { fail++; }
-      done++; if (done % 3 === 0 || done === todo.length) show();
+      done++; if (onProg && (done % 3 === 0 || done === todo.length)) onProg(done, todo.length, bytes);
     }
   }
   await Promise.all([worker(), worker(), worker(), worker()]);
-  // ملفات الموقع نفسها (حتى يفتح دون إنترنت)
-  try { await Promise.all(['pdfv.js', 'ai.js', 'rich.js', 'art.js', 'katex.min.js', 'katex.min.css', 'katex-auto-render.min.js', 'katex-mhchem.min.js'].map((f) => fetch(f + (f.indexOf('katex') === 0 ? '' : '?v=' + APP_V)).catch(() => {}))); } catch (e) {}
-  const ok = fail === 0 || fail < todo.length * 0.02;
-  try { localStorage.setItem(DLK(ch), JSON.stringify({ b: ch.build || '', ok: ok, t: now(), n: todo.length, mb: Math.round(bytes / 1048576) })); } catch (e) {}
-  DLRUN = null;
-  if (btn.isConnected) { btn.outerHTML = dlBtn(ch); }
-  toast(ok ? '✓ حُمّل الدرس (' + Math.round(bytes / 1048576) + ' MB). يمكنك دراسته دون إنترنت.' : '⚠ لم يكتمل التحميل (' + fail + ' ملف). أعد المحاولة بإنترنت أفضل.');
+  return { ok: fail === 0 || fail < todo.length * 0.02, fail: fail, bytes: bytes, n: todo.length };
+}
+function dlShell() {   // ملفات الموقع نفسها (حتى يفتح دون إنترنت)
+  return Promise.all(['pdfv.js', 'ai.js', 'rich.js', 'art.js', 'katex.min.js', 'katex.min.css', 'katex-auto-render.min.js', 'katex-mhchem.min.js'].map((f) => fetch(f + (f.indexOf('katex') === 0 ? '' : '?v=' + APP_V)).catch(() => {}))).catch(() => {});
+}
+const MB = (b) => Math.round(b / 1048576);
+function saveDl(ch, r) { try { localStorage.setItem(DLK(ch), JSON.stringify({ b: ch.build || '', ok: r.ok, t: now(), n: r.n, mb: MB(r.bytes) })); } catch (e) {} }
+function persist() { try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {} }
+async function downloadCh(ch, btn) {
+  if (DLRUN) { toast('يوجد تحميل جارٍ، انتظر حتى ينتهي.'); return; }
+  if (!navigator.onLine) { btn.textContent = '⚠ تحتاج الإنترنت للتحميل'; return; }
+  DLRUN = 'ch'; persist();
+  const r = await dlIds(ch, (d, n, b) => { if (btn.isConnected) btn.textContent = '⬇ جارٍ التحميل… ' + d + '/' + n + ' (' + MB(b) + ' MB)'; });
+  await dlShell();
+  saveDl(ch, r); DLRUN = null;
+  if (btn.isConnected) btn.outerHTML = dlBtn(ch);
+  renderUser();
+  toast(r.ok ? '✓ حُمّل الدرس (' + MB(r.bytes) + ' MB). يمكنك دراسته دون إنترنت.' : '⚠ لم يكتمل التحميل (' + r.fail + ' ملف). أعد المحاولة بإنترنت أفضل.');
+}
+/* تحميل كل المواد والدروس ضربة واحدة (زر في أعلى الموقع) */
+let DLALL = null;   // {i, n, mb}
+function allChapters() { return [].concat(...Object.values(MS || {}).map((m) => m.chapters || [])); }
+function dlAllState() {
+  const L = allChapters(); if (!L.length) return { n: 0, fresh: 0 };
+  const fresh = L.filter((ch) => { const st = dlState(ch); return st && st.ok && st.b === (ch.build || ''); }).length;
+  return { n: L.length, fresh: fresh };
+}
+function dlChip() {
+  if (DLALL) return '<button type="button" class="chip dlall run" data-act="dlall" title="جارٍ تحميل كل الدروس">⬇ ' + DLALL.i + '/' + DLALL.n + '<span class="wd"> · ' + DLALL.mb + 'MB</span></button>';
+  const s = dlAllState(); if (!s.n) return '';
+  if (s.fresh === s.n) return '<button type="button" class="chip dlall done" data-act="dlall" title="كل الدروس محمّلة للدراسة دون إنترنت">✓<span class="wd"> محمّل</span></button>';
+  return '<button type="button" class="chip dlall" data-act="dlall" title="تحميل كل الدروس للدراسة دون إنترنت">⬇ ' + (s.fresh ? 'أكمل<span class="wd"> التحميل</span>' : 'تحميل<span class="wd"> الكل</span>') + '</button>';
+}
+async function downloadAll() {
+  if (DLALL) { toast('التحميل جارٍ: ' + DLALL.i + '/' + DLALL.n + ' درس · ' + DLALL.mb + ' MB'); return; }
+  if (DLRUN) { toast('يوجد تحميل جارٍ، انتظر حتى ينتهي.'); return; }
+  const s = dlAllState();
+  if (s.n && s.fresh === s.n) { toast('✓ كل الدروس (' + s.n + ') محمّلة. يمكنك الدراسة دون إنترنت.'); return; }
+  if (!navigator.onLine) { toast('⚠ تحتاج الإنترنت للتحميل.'); return; }
+  if (!confirm('تحميل كل المواد والدروس (' + s.n + ' درس) للدراسة دون إنترنت؟\n\nالحجم كبير (قد يصل إلى مئات MB)، فاستعمل Wi-Fi إن أمكن، واترك الموقع مفتوحاً حتى ينتهي.\nالدروس المحمّلة سابقاً لا تُحمّل مرة ثانية.')) return;
+  persist(); DLRUN = 'all';
+  const subs = Object.values(MS || {});
+  const L = allChapters().filter((ch) => { const st = dlState(ch); return !(st && st.ok && st.b === (ch.build || '')); });
+  DLALL = { i: 0, n: L.length, mb: 0 }; renderUser();
+  let bytes = 0, bad = 0;
+  // صور المادة العامة (الغلاف، الإحصائيات…)
+  for (const m of subs) { const o = Object.assign({}, m); delete o.chapters; try { bytes += (await dlIds(o)).bytes; } catch (e) {} }
+  for (const ch of L) {
+    if (!navigator.onLine) { bad++; break; }
+    const r = await dlIds(ch, (d, n, b) => { DLALL.mb = MB(bytes + b); const c = document.querySelector('.chip.dlall'); if (c) c.innerHTML = '⬇ ' + (DLALL.i + 1) + '/' + DLALL.n + '<span class="wd"> · ' + DLALL.mb + 'MB</span>'; });
+    bytes += r.bytes; saveDl(ch, r); if (!r.ok) bad++;
+    DLALL.i++; DLALL.mb = MB(bytes);
+  }
+  await dlShell();
+  DLALL = null; DLRUN = null; renderUser();
+  document.querySelectorAll('.dlb').forEach((b) => { const ch = allChapters().find((c) => String(c.id) === b.dataset.ch); if (ch) b.outerHTML = dlBtn(ch); });
+  toast(bad ? '⚠ لم يكتمل تحميل ' + bad + ' درس. اضغط «أكمل التحميل» عندما يكون الإنترنت أفضل.' : '✓ حُمّل كل شيء (' + MB(bytes) + ' MB). يمكنك الآن الدراسة دون إنترنت.');
 }
 /* شريط «دون إنترنت» */
 function netBar() {
@@ -950,7 +997,7 @@ window.addEventListener('online', netBar); window.addEventListener('offline', ne
 let aiOn = false;
 function startAI() {
   if (aiOn) return; aiOn = true;
-  import('./ai.js?v=77').then((m) => m.mountAI({
+  import('./ai.js?v=78').then((m) => m.mountAI({
     email: () => (me && me.email) || '',
     getCtx: aiCtx,
     listChats: () => listChats(me.email), saveChat: (id, j) => saveChat(me.email, id, j), delChat: (id) => delChat(me.email, id)
@@ -1630,6 +1677,7 @@ document.addEventListener('click', async (e) => {
     else if (act === 'logout') { if (unwatch) { unwatch(); unwatch = null; } pendingM = null; if (pushTimer) await push(); clearInterval(tick); quizSel = {}; revRes = {}; revLists = {}; IDX = null; Object.keys(TXT).forEach((k) => delete TXT[k]); Object.keys(FCD).forEach((k) => delete FCD[k]); Object.keys(FCARDS).forEach((k) => delete FCARDS[k]); FS = null; wmUrl = ''; ready = false; cloud = 'off'; await signOutUser(); }
     else if (act === 'request') { a.disabled = true; try { await sendRequest(me); gPending(me); } catch (err) { gError(friendly(err)); } }
     else if (act === 'recheck') onUser(me);
+    else if (act === 'dlall') downloadAll();
     else if (act === 'dl') { const ch = [].concat(...Object.values(MS || {}).map((m) => m.chapters || [])).find((c) => String(c.id) === a.dataset.ch) || (M && M.chapters.find((c) => String(c.id) === a.dataset.ch)); if (ch) downloadCh(ch, a); }
     else if (act === 'swapdev') { if (confirm('استبدال هذا الجهاز بالجهاز الحالي؟ لن تتمكن من استبدال آخر قبل ' + SWAP_DAYS + ' يوماً.')) swapDevice(a.dataset.id); }
     else if (act === 'aiq') { if (window.__gcAsk) window.__gcAsk(null, 'اشرح لي هذا السؤال: ما المطلوب، ولماذا كل اقتراح صحيح أو خاطئ، اعتماداً على الدرس.'); }

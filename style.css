@@ -1425,3 +1425,8 @@ body.pdfmode #gcai{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .pvtbar button[data-t="del"]{color:#fca5a5}
 .pvtbar svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .pvtbar output{color:#93c5fd;font:700 12px Outfit,sans-serif;min-width:20px;text-align:center}
+.chip.dlall{background:#0ea5e9;border-color:transparent;color:#fff;font-weight:700;white-space:nowrap}
+.chip.dlall.done{background:transparent;border-color:#22c55e;color:#86efac}
+.chip.dlall.run{background:#0369a1;animation:dlp 1.6s ease-in-out infinite}
+@keyframes dlp{50%{opacity:.7}}
+@media (max-width:420px){.chip.dlall .wd{display:none}}

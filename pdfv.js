@@ -2,7 +2,8 @@
 // الصفحات صور محمية بعلامة البريد؛ لا تحميل ولا مشاركة ولا طباعة.
 // ملاحظات الطالب تُحفظ تلقائياً في حسابه (Firestore: notes/<email>/ch/<chapter>).
 
-const PEN_COLS = ['#e53935', '#fb8c00', '#fdd835', '#26c6b0', '#42a5f5', '#1e40af', '#8e44ad', '#111827'];
+const PEN_COLS = ['#e53935', '#fb8c00', '#fdd835', '#26c6b0', '#42a5f5', '#1e40af', '#8e44ad', '#111827', '#ffffff'];
+const STICK = [['', 'بدون'], ['#fef08a', ''], ['#fbcfe8', ''], ['#bfdbfe', ''], ['#bbf7d0', ''], ['#fed7aa', '']];
 const HL_COLS = ['#fde047', '#86efac', '#f9a8d4', '#93c5fd', '#fdba74'];
 const KINDS = [['pen', 'قلم حبر'], ['ball', 'قلم جاف'], ['pencil', 'رصاص'], ['brush', 'فرشاة']];
 const ZOOMS = [[0.75, '75%'], [1, 'ملاءمة'], [1.25, '125%'], [1.5, '150%'], [2, '200%'], [2.5, '250%']];
@@ -19,6 +20,8 @@ const I = {
   laser: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg>',
   hand: '<svg viewBox="0 0 24 24"><path d="M8 12V5.5a1.5 1.5 0 0 1 3 0V11M11 10.5V4a1.5 1.5 0 0 1 3 0v6.5M14 10.5V5.5a1.5 1.5 0 0 1 3 0V13"/><path d="M17 9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1a6.5 6.5 0 0 1-5.2-2.6L4 14.6a1.5 1.5 0 0 1 2.3-1.9L8 14.5"/></svg>',
   x: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  sel: '<svg viewBox="0 0 24 24"><path d="M4 6V4h2M18 4h2v2M20 18v2h-2M6 20H4v-2"/><path d="M9 8h6M12 8v8M10.5 16h3"/></svg>',
+  pagecfg: '<svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/><path d="M14 3v5h5"/><path d="M19 8v3"/><circle cx="17.5" cy="17.5" r="2.2"/><path d="M17.5 13.5v1.3M17.5 20.2v1.3M13.5 17.5h1.3M20.2 17.5h1.3M14.7 14.7l.9.9M19.4 19.4l.9.9M14.7 20.3l.9-.9M19.4 15.6l.9-.9"/></svg>',
   trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>'
 };
 
@@ -26,7 +29,7 @@ export function mountPdf(root, o) {
   const ch = o.ch, ids = ch.pdf, N = ids.length, R = ch.pdfR || [];
   const esc = o.esc;
   let LS = {}; try { LS = JSON.parse(localStorage.getItem('gueschemi.pvtools') || '{}') || {}; } catch (e) {}
-  const st = Object.assign({ tool: '', kind: 'pen', pc: PEN_COLS[5], pw: 6, hc: HL_COLS[0], hw: 22, emode: 'stroke', ehl: false, straight: false, tz: 16, tc: '#111827', zoom: 1 }, LS);
+  const st = Object.assign({ tool: '', kind: 'pen', pc: PEN_COLS[5], pw: 6, hc: HL_COLS[0], hw: 22, emode: 'stroke', ehl: false, straight: false, tz: 16, tc: '#111827', zoom: 1, tone: 'white' }, LS);
   st.tool = '';
   const keepLS = () => { try { const c = Object.assign({}, st); delete c.tool; localStorage.setItem('gueschemi.pvtools', JSON.stringify(c)); } catch (e) {} };
 
@@ -40,14 +43,16 @@ export function mountPdf(root, o) {
     '<div class="pvttl"><b class="lat">' + esc(ch.en) + '</b><small>' + esc(ch.ar) + '</small></div>' +
     '<span class="pvsave" aria-live="polite"></span>' +
     '<select class="pvsel" data-pv="page" dir="ltr" aria-label="الصفحة"></select>' +
+    '<button type="button" class="pvnew pvpaste" data-pv="paste" hidden>📋 لصق</button>' +
     '<button type="button" class="pvnew" data-pv="new" title="إضافة صفحة فارغة خاصة بك بعد الصفحة الحالية لتكتب فيها ملاحظاتك"><span class="pl">＋</span><span class="tx">صفحة ملاحظات</span></button>' +
     '<select class="pvsel" data-pv="zoom" aria-label="التكبير">' + ZOOMS.map((z) => '<option value="' + z[0] + '"' + (z[0] === st.zoom ? ' selected' : '') + '>' + z[1] + '</option>').join('') + '</select></div>' +
     '<div class="pvscroll"><div class="pvdoc" style="--pz:' + st.zoom + '"></div></div>' +
     '<div class="pvpop" hidden></div>' +
     '<div class="pvbar" role="toolbar" aria-label="أدوات الكتابة">' +
-    btn('text', 'كتابة بلوحة المفاتيح') + btn('pen', 'قلم') + btn('hl', 'قلم تظليل') + btn('er', 'ممحاة') + btn('lasso', 'تحديد') +
+    btn('text', 'كتابة بلوحة المفاتيح') + btn('pen', 'قلم') + btn('hl', 'قلم تظليل') + btn('er', 'ممحاة') + btn('lasso', 'تحديد') + (ch.pdfT ? btn('sel', 'تحديد نص من الدرس (نسخ، Google، Gemini)') : '') +
     '<button type="button" class="pvb" data-act="undo" aria-label="تراجع" disabled>' + I.undo + '</button><button type="button" class="pvb" data-act="redo" aria-label="إعادة" disabled>' + I.redo + '</button>' +
-    btn('laser', 'مؤشر ليزر') + '<button type="button" class="pvb on" data-tool="" aria-label="قراءة وتمرير">' + I.hand + '</button></div></div>';
+    btn('laser', 'مؤشر ليزر') + '<button type="button" class="pvb on" data-tool="" aria-label="قراءة وتمرير">' + I.hand + '</button>' +
+    '<button type="button" class="pvb pvpg" data-act="page" aria-label="إعدادات صفحة الملاحظات" title="إعدادات صفحة الملاحظات (اللون، النوع، الحذف)" hidden>' + I.pagecfg + '</button></div></div>';
   function btn(t, l) { return '<button type="button" class="pvb" data-tool="' + t + '" aria-label="' + l + '" title="' + l + '">' + I[t] + (t === 'pen' || t === 'hl' || t === 'text' ? '<i class="dot"></i>' : '') + '</button>'; }
 
   const $ = (s) => root.querySelector(s);
@@ -80,7 +85,35 @@ export function mountPdf(root, o) {
   const items = (k) => data.p[k] || (data.p[k] = []);
 
   /* ---------- بناء الصفحات: صفحات الدرس + صفحات الملاحظات التي يضيفها الطالب ---------- */
-  const PAPERS = [['blank', 'ورقة بيضاء'], ['lined', 'ورقة مسطّرة'], ['grid', 'ورقة مربعات']];
+  const PAPERS = [['blank', 'فارغة'], ['lined-n', 'مسطّرة ضيقة'], ['lined', 'مسطّرة'], ['lined-w', 'مسطّرة واسعة'], ['grid-n', 'مربعات صغيرة'], ['grid', 'مربعات'], ['grid-w', 'مربعات كبيرة'], ['dot-n', 'نقاط متقاربة'], ['dot', 'نقاط'], ['dot-w', 'نقاط متباعدة'], ['oxford', 'أكسفورد (بهامش)'], ['cornell', 'كورنيل (للمراجعة)'], ['check', 'قائمة مهام'], ['table', 'جدول عمودين']];
+  const TONES = [['white', '#ffffff', 'بيضاء'], ['cream', '#fdf6e3', 'كريمي'], ['yellow', '#fff3b8', 'صفراء'], ['peach', '#ffdcc2', 'مشمشي'], ['pink', '#fbd5dc', 'وردية'], ['mint', '#d3f2e4', 'نعناعي'], ['sky', '#d6e8fa', 'سماوية'], ['lavender', '#e6dffa', 'بنفسجية'], ['gray', '#e5e7eb', 'رمادية'], ['sage', '#a7c4b5', 'زيتية'], ['navy', '#1e293b', 'كحلية'], ['black', '#141518', 'سوداء']];
+  const toneOf = (k) => TONES.find((t) => t[0] === k) || TONES[0];
+  const isDarkTone = (k) => k === 'black' || k === 'navy';
+  // خلفية الورقة: صور SVG صغيرة مكرّرة، مقاسها نسبة من عرض الصفحة حتى تتكبّر مع التكبير
+  function paperCSS(paper, tone, pw) {
+    const dark = isDarkTone(tone), ln = dark ? 'rgba(255,255,255,0.22)' : 'rgba(60,90,150,0.32)', dt = dark ? 'rgba(255,255,255,0.38)' : 'rgba(60,80,120,0.45)';
+    const enc = (s) => "url('data:image/svg+xml;charset=utf-8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" ' + s + '</svg>').replace(/'/g, '%27') + "')";
+    const U = (k) => (pw ? (pw * k).toFixed(2) + 'px' : 'calc(var(--pw,800px) * ' + k + ')');
+    const [base, sz] = (paper || 'lined').split('-');
+    const k = { lined: { n: 0.024, '': 0.034, w: 0.05 }, grid: { n: 0.02, '': 0.03, w: 0.05 }, dot: { n: 0.022, '': 0.034, w: 0.05 } };
+    const step = (b) => k[b][sz || ''];
+    const lineRow = enc('width="100" height="10" preserveAspectRatio="none" viewBox="0 0 100 10"><rect y="9.4" width="100" height="0.6" fill="' + ln + '"/>');
+    const L = [];
+    if (base === 'lined' || base === 'oxford' || base === 'cornell' || base === 'table') L.push([lineRow, '100% ' + U(base === 'lined' ? step('lined') : 0.034)]);
+    if (base === 'grid') L.push([enc('width="10" height="10" viewBox="0 0 10 10"><path d="M10 0V10H0" fill="none" stroke="' + ln + '" stroke-width="0.5"/>'), U(step('grid')) + ' ' + U(step('grid'))]);
+    if (base === 'dot') L.push([enc('width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="0.75" fill="' + dt + '"/>'), U(step('dot')) + ' ' + U(step('dot'))]);
+    if (base === 'check') L.push([enc('width="100" height="10" preserveAspectRatio="xMaxYMid meet" viewBox="0 0 100 10"><rect y="9.4" width="100" height="0.6" fill="' + ln + '"/><rect x="95.2" y="2.8" width="3.6" height="3.6" rx="0.6" fill="none" stroke="' + dt + '" stroke-width="0.5"/>'), '100% ' + U(0.05)]);
+    if (base === 'oxford') L.unshift([enc('width="100" height="100" preserveAspectRatio="none" viewBox="0 0 100 100"><rect x="91" width="0.35" height="100" fill="#ef4444" opacity="0.7"/><rect width="100" height="7" fill="' + (dark ? 'rgba(255,255,255,0.04)' : 'rgba(60,90,150,0.05)') + '"/>'), '100% 100%']);
+    if (base === 'cornell') L.unshift([enc('width="100" height="100" preserveAspectRatio="none" viewBox="0 0 100 100"><rect x="70" width="0.4" height="78" fill="' + dt + '"/><rect y="78" width="100" height="0.5" fill="' + dt + '"/><rect y="78.5" width="100" height="21.5" fill="' + (dark ? 'rgba(255,255,255,0.05)' : 'rgba(60,90,150,0.06)') + '"/>'), '100% 100%']);
+    if (base === 'table') L.unshift([enc('width="100" height="100" preserveAspectRatio="none" viewBox="0 0 100 100"><rect x="49.8" width="0.4" height="100" fill="' + dt + '"/>'), '100% 100%']);
+    return 'background-color:' + toneOf(tone)[1] + (L.length ? ';background-image:' + L.map((x) => x[0]).join(',') + ';background-size:' + L.map((x) => x[1]).join(',') + ';background-repeat:repeat' : '');
+  }
+  function stylePicker(mode, after) {
+    return '<p class="pvnl">لون الورقة</p><div class="pvtones2">' + TONES.map((t) => '<button type="button" class="pvtone2' + (t[0] === st.tone ? ' on' : '') + '" data-tone="' + t[0] + '" style="background:' + t[1] + '" title="' + t[2] + '" aria-label="' + t[2] + '"></button>').join('') + '</div>' +
+      '<p class="pvnl">نوع الورقة <small>(' + (mode === 'edit' ? 'اضغط لتغيير هذه الصفحة' : 'اضغط لإضافة الصفحة') + ')</small></p><div class="pvstyles">' +
+      PAPERS.map((x) => '<button type="button" data-paper="' + x[0] + '" data-after="' + after + '"><i class="pvthumb" data-p="' + x[0] + '" style="' + paperCSS(x[0], st.tone, 150) + '"></i><span>' + x[1] + '</span></button>').join('') + '</div>';
+  }
+  function refreshThumbs() { POP.querySelectorAll('.pvthumb').forEach((i) => { i.setAttribute('style', paperCSS(i.dataset.p, st.tone, 150)); }); }
   const addBar = () => '';
   function build() {
     const keepK = pages[cur] ? pages[cur].k : null;
@@ -88,7 +121,7 @@ export function mountPdf(root, o) {
     io.disconnect();
     pages.forEach((p) => { p.cv.width = p.cv.height = 0; p.base.width = p.base.height = 0; });
     const X = data.x || {}, seq = [];
-    const noteFig = (n, after) => { seq.push({ k: 'n' + n.id, li: null, after: after }); return '<figure class="pvp note paper-' + (n.paper || 'lined') + '" data-i="' + (seq.length - 1) + '" style="aspect-ratio:' + (R[Math.max(0, after)] || 1.7778) + '"><div class="pvnhead"><span>📝 صفحة ملاحظاتك</span><button type="button" class="pvndel" data-del="' + n.id + '">حذف هذه الصفحة</button></div><canvas class="pvc"></canvas><div class="pvlay"></div><i class="wm"></i></figure>' + addBar(after); };
+    const noteFig = (n, after) => { seq.push({ k: 'n' + n.id, li: null, after: after, dark: isDarkTone(n.tone), nid: n.id }); return '<figure class="pvp note' + (isDarkTone(n.tone) ? ' dark' : '') + '" data-i="' + (seq.length - 1) + '" style="aspect-ratio:' + (R[Math.max(0, after)] || 1.7778) + ';' + paperCSS(n.paper, n.tone || 'white') + '"><canvas class="pvc"></canvas><div class="pvlay"></div><i class="wm"></i></figure>' + addBar(after); };
     let h = addBar(-1);
     (X['-1'] || []).forEach((n) => { h += noteFig(n, -1); });
     for (let i = 0; i < N; i++) {
@@ -116,12 +149,13 @@ export function mountPdf(root, o) {
     const small = $('.pvttl small'); if (small) small.textContent = ch.ar + (nn ? ' · ' + nn + (nn === 1 ? ' صفحة ملاحظات' : nn === 2 ? ' صفحتا ملاحظات' : nn <= 10 ? ' صفحات ملاحظات' : ' صفحة ملاحظات') : '');
     if (keepK && byKey[keepK]) cur = byKey[keepK].idx; else cur = Math.max(0, Math.min(cur, pages.length - 1));
     selPage.value = String(cur);
-    undo.length = 0; redo.length = 0; uiUndo();
+    undo.length = 0; redo.length = 0; uiUndo(); syncPgBtn();
   }
-  function addNote(after, paper) {
+  function syncPgBtn() { const b = BAR.querySelector('[data-act="page"]'); if (b) b.hidden = !(pages[cur] && pages[cur].nid); }
+  function addNote(after, paper, tone) {
     data.x = data.x || {};
     const L = data.x[String(after)] || (data.x[String(after)] = []);
-    const n = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), paper: paper };
+    const n = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), paper: paper, tone: tone || 'white' };
     L.push(n);
     build(); touch();
     const p = byKey['n' + n.id]; if (p) { cur = p.idx; selPage.value = String(cur); requestAnimationFrame(() => goPage(p.idx, true)); }
@@ -145,24 +179,81 @@ export function mountPdf(root, o) {
       bar.insertAdjacentHTML('beforeend', '<div class="pvpaper"><p><b>صفحة ملاحظات جديدة</b> تُضاف هنا بين صفحات الدرس، لتكتب فيها بالقلم أو بلوحة المفاتيح. هي خاصة بك وتُحفظ في حسابك، والدرس الأصلي لا يتغيّر. اختر نوع الورقة:</p><div class="pvpapers">' + PAPERS.map((x) => '<button type="button" data-paper="' + x[0] + '"><i class="pvsw paper-' + x[0] + '"></i><span>' + x[1] + '</span></button>').join('') + '</div><button type="button" class="pvpx" data-paper-x>إلغاء</button></div>');
       return;
     }
+    const sty = e.target.closest('[data-style]');
+    if (sty) { editStylePop(sty.dataset.style); return; }
     if (d) {
       if (d.dataset.sure) delNote(d.dataset.del);
-      else { d.dataset.sure = '1'; d.textContent = 'اضغط مرة أخرى للحذف'; setTimeout(() => { if (d.isConnected) { delete d.dataset.sure; d.textContent = 'حذف هذه الصفحة'; } }, 3000); }
+      else { d.dataset.sure = '1'; d.classList.add('sure'); d.innerHTML = I.trash + '<span>اضغط مرة أخرى للحذف</span>'; setTimeout(() => { if (d.isConnected) { delete d.dataset.sure; d.classList.remove('sure'); d.innerHTML = I.trash; } }, 3000); }
     }
   });
 
+  /* ---------- نسخ جمل قصيرة من الدرس + بحث Google / Gemini ---------- */
+  const MAXC = 300;
+  let TX = null, txP = null, tsel = null, clip = null;
+  function loadTX() { if (!ch.pdfT) return Promise.resolve(null); if (!txP) txP = o.getImage(ch.pdfT).then((s) => { TX = JSON.parse(s).p || []; return TX; }).catch(() => { txP = null; return null; }); return txP; }
+  function copyText(t) {
+    const fb = () => { const ta = document.createElement('textarea'); ta.value = t; ta.style.cssText = 'position:fixed;top:-100px;opacity:0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) {} ta.remove(); };
+    try { if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t).catch(fb); } catch (e) {}
+    fb(); return Promise.resolve();
+  }
+  function toast(msg) { const t = document.createElement('div'); t.className = 'pvtoast'; t.textContent = msg; PV.appendChild(t); setTimeout(() => t.remove(), 2200); }
+  function clearTSel() { if (tsel) { tsel.el.remove(); tsel = null; } }
+  function makeTSel(p, a, b) {
+    clearTSel();
+    if (!TX) { loadTX().then(() => { if (TX) makeTSel(p, a, b); else toast('النص غير متاح لهذه الصفحة'); }); return; }
+    const L = TX[p.li] || [];
+    const tap = Math.abs(a[0] - b[0]) < 80 && Math.abs(a[1] - b[1]) < 80;
+    const x0 = Math.min(a[0], b[0]), x1 = Math.max(a[0], b[0]), y0 = Math.min(a[1], b[1]), y1 = Math.max(a[1], b[1]);
+    let got = L.filter((l) => tap ? (a[0] >= l[0] - 40 && a[0] <= l[2] + 40 && a[1] >= l[1] - 40 && a[1] <= l[3] + 40)
+      : (Math.min(x1, l[2]) - Math.max(x0, l[0]) > (l[2] - l[0]) * 0.3 || (l[0] >= x0 && l[2] <= x1)) && (Math.min(y1, l[3]) - Math.max(y0, l[1]) > (l[3] - l[1]) * 0.5));
+    if (!got.length) { toast('لا يوجد نص هنا'); return; }
+    got.sort((u, v) => (u[1] - v[1]) || (u[0] - v[0]));
+    let txt = got.map((l) => l[4]).join('\n'), cut = false;
+    if (txt.length > MAXC) { txt = txt.slice(0, MAXC); cut = true; }
+    const el = document.createElement('div'); el.className = 'pvtsel';
+    el.innerHTML = got.map((l) => '<i style="left:' + l[0] / 100 + '%;top:' + l[1] / 100 + '%;width:' + (l[2] - l[0]) / 100 + '%;height:' + (l[3] - l[1]) / 100 + '%"></i>').join('') +
+      '<div class="pvtbar" style="top:' + Math.max(0, Math.min(...got.map((l) => l[1])) / 100) + '%"><button type="button" data-t="copy">نسخ</button><button type="button" data-t="google">بحث Google</button><button type="button" data-t="gemini">اسأل Gemini</button><span class="lat">' + txt.length + '/' + MAXC + '</span></div>';
+    p.lay.appendChild(el); tsel = { el: el, txt: txt };
+    if (cut) toast('النسخ محدود بـ ' + MAXC + ' حرفاً في كل مرة');
+    el.querySelector('.pvtbar').addEventListener('pointerdown', (e) => e.stopPropagation());
+    el.querySelector('.pvtbar').addEventListener('click', (e) => {
+      const k = e.target.closest('[data-t]'); if (!k) return; const t = tsel ? tsel.txt : '';
+      if (k.dataset.t === 'copy') copyText(t).then(() => toast('تم النسخ'));
+      else if (k.dataset.t === 'google') window.open('https://www.google.com/search?q=' + encodeURIComponent(t), '_blank', 'noopener');
+      else if (k.dataset.t === 'gemini') { if (window.__gcAsk) window.__gcAsk(t); else window.open('https://www.google.com/search?udm=50&q=' + encodeURIComponent(t), '_blank', 'noopener'); }
+      clearTSel();
+    });
+  }
+  /* نسخ ولصق كتابة الطالب نفسه (بالتحديد) */
+  function copyStrokes() {
+    if (!sel) return;
+    clip = JSON.parse(JSON.stringify(sel.items));
+    const t = sel.items.filter((s) => s.t === 'x').map((s) => s.s).join('\n');
+    if (t) copyText(t);
+    syncPaste(); toast('تم النسخ. اضغط «لصق» في الصفحة التي تريد');
+  }
+  function pasteStrokes() {
+    if (!clip) return; const p = pages[cur]; if (!p) return;
+    clearSel();
+    const add = clip.map((s) => s.t === 'x' ? Object.assign({}, s, { x: Math.min(9000, s.x + 150), y: Math.min(9500, s.y + 150) }) : Object.assign({}, s, { pts: s.pts.map((v, k) => Math.min(10000, v + 150)) }));
+    const op = { pg: p.k, add: add, del: [] }; apply(op, false); commit(op);
+  }
+  function syncPaste() { const b = $('[data-pv="paste"]'); if (b) b.hidden = !clip; }
+
   /* ---------- الرسم ---------- */
-  function drawStroke(c, s, W, H, off) {
+  const DARK = (c) => c === '#111827' || c === '#000000';
+  function drawStroke(c, s, W, H, off, dark) {
     const pts = s.pts; if (!pts || pts.length < 2) return;
     const dx = off ? off[0] : 0, dy = off ? off[1] : 0;
     c.save();
     c.lineCap = 'round'; c.lineJoin = 'round';
     let lw = s.w / 1000 * W;
-    if (s.t === 'h') { c.globalAlpha = 0.38; c.lineCap = 'butt'; c.globalCompositeOperation = 'multiply'; }
+    if (s.t === 'h') { c.globalAlpha = dark ? 0.45 : 0.38; c.lineCap = 'butt'; if (!dark) c.globalCompositeOperation = 'multiply'; }
     else if (s.k === 'ball') lw *= 0.75;
     else if (s.k === 'pencil') { c.globalAlpha = 0.72; lw *= 0.7; }
     else if (s.k === 'brush') lw *= 1.7;
-    c.strokeStyle = s.c; c.fillStyle = s.c; c.lineWidth = Math.max(0.6, lw);
+    const col = dark && DARK(s.c) ? '#f3f4f6' : s.c;
+    c.strokeStyle = col; c.fillStyle = col; c.lineWidth = Math.max(0.6, lw);
     const X = (k) => (pts[k] / 10000 + dx) * W, Y = (k) => (pts[k + 1] / 10000 + dy) * H;
     c.beginPath();
     if (pts.length === 2) { c.arc(X(0), Y(0), c.lineWidth / 2, 0, 7); c.fill(); c.restore(); return; }
@@ -174,12 +265,12 @@ export function mountPdf(root, o) {
   function renderBase(p) {
     const c = p.bctx, W = p.base.width, H = p.base.height; if (!W) return;
     c.clearRect(0, 0, W, H);
-    (data.p[p.k] || []).forEach((s) => { if (s.t === 'p' || s.t === 'h') { if (sel && sel.pg === p.k && sel.set.has(s)) return; drawStroke(c, s, W, H); } });
+    (data.p[p.k] || []).forEach((s) => { if (s.t === 'p' || s.t === 'h') { if (sel && sel.pg === p.k && sel.set.has(s)) return; drawStroke(c, s, W, H, null, p.dark); } });
   }
   function blit(p, extra) {
     const c = p.ctx, W = p.cv.width, H = p.cv.height; if (!W) return;
     c.clearRect(0, 0, W, H); c.drawImage(p.base, 0, 0);
-    if (sel && sel.pg === p.k) sel.items.forEach((s) => { if (s.t !== 'x') drawStroke(c, s, W, H, sel.off); });
+    if (sel && sel.pg === p.k) sel.items.forEach((s) => { if (s.t !== 'x') drawStroke(c, s, W, H, sel.off, p.dark); });
     if (extra) extra(c, W, H);
   }
   let rafQ = new Set(), rafId = 0;
@@ -191,10 +282,11 @@ export function mountPdf(root, o) {
     (data.p[p.k] || []).forEach((s) => { if (s.t === 'x') p.lay.appendChild(textEl(p, s)); });
   }
   function textEl(p, s) {
+    const stick = !!s.b;
     const ta = document.createElement('textarea');
-    ta.className = 'pvx'; ta.value = s.s || ''; ta.dir = 'auto'; ta.rows = 1; ta.spellcheck = false;
+    ta.className = 'pvx' + (stick ? ' stick' : ''); if (stick) ta.style.background = s.b; ta.value = s.s || ''; ta.dir = 'auto'; ta.rows = 1; ta.spellcheck = false;
     ta.style.left = (s.x / 100) + '%'; ta.style.top = (s.y / 100) + '%';
-    ta.style.color = s.c; ta.style.fontSize = 'calc(var(--pw) * ' + (s.z / 1000) + ')';
+    ta.style.color = p.dark && !stick && DARK(s.c) ? '#f3f4f6' : s.c; ta.style.fontSize = 'calc(var(--pw) * ' + (s.z / 1000) + ')';
     if (sel && sel.pg === p.k && sel.set.has(s)) ta.classList.add('selx');
     const fit = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; ta.style.width = 'auto'; ta.style.width = Math.min(p.fig.clientWidth * (1 - s.x / 10000) - 4, Math.max(60, measure(ta) + 18)) + 'px'; };
     ta.addEventListener('input', () => { s.s = ta.value; fit(); touch(); });
@@ -208,8 +300,9 @@ export function mountPdf(root, o) {
   /* ---------- الأدوات ---------- */
   function setTool(t) {
     if (st.tool === t && t && t !== 'lasso' && t !== 'laser') { togglePop(t); return; }
-    clearSel(); closePop();
+    clearSel(); clearTSel(); closePop();
     st.tool = t;
+    if (t === 'sel') loadTX();
     PV.dataset.tool = t;
     BAR.querySelectorAll('[data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === t));
     document.activeElement && document.activeElement.blur && document.activeElement.blur();
@@ -218,7 +311,7 @@ export function mountPdf(root, o) {
     const d = (t, c) => { const b = BAR.querySelector('[data-tool="' + t + '"] .dot'); if (b) b.style.background = c; };
     d('pen', st.pc); d('hl', st.hc); d('text', st.tc);
   }
-  function closePop() { POP.hidden = true; POP.innerHTML = ''; POP.dataset.for = ''; }
+  function closePop() { POP.hidden = true; POP.innerHTML = ''; POP.dataset.for = ''; POP.dataset.edit = ''; }
   function togglePop(t) { if (!POP.hidden && POP.dataset.for === t) { closePop(); return; } openPop(t); }
   function sw(cols, curC, attr) { return '<div class="pvcols">' + cols.map((c) => '<button type="button" class="pvcol' + (c === curC ? ' on' : '') + '" data-' + attr + '="' + c + '" style="background:' + c + '" aria-label="لون"></button>').join('') + '<label class="pvcol any" aria-label="لون آخر"><input type="color" data-' + attr + '-any value="' + curC + '"></label></div>'; }
   function openPop(t) {
@@ -234,7 +327,9 @@ export function mountPdf(root, o) {
         '<label class="pvtog"><span>مسح التظليل فقط</span><input type="checkbox" data-ehl' + (st.ehl ? ' checked' : '') + '><i></i></label>' +
         '<button type="button" class="pvall" data-erall>مسح كل الكتابة في هذه الصفحة</button>';
     } else if (t === 'text') {
-      h += rng('tz', st.tz, 8, 40) + sw(PEN_COLS, st.tc, 'tc') + '<p class="pvhint">اضغط على الصفحة في المكان الذي تريد الكتابة فيه.</p>';
+      h += rng('tz', st.tz, 8, 40) + sw(PEN_COLS, st.tc, 'tc') +
+        '<p class="pvnl" style="margin-top:14px">خلفية النص <small>(ملصق ملوّن مثل Sticky note)</small></p><div class="pvtbs">' + STICK.map((c) => '<button type="button" class="pvtb' + ((st.tb || '') === c[0] ? ' on' : '') + '" data-tb="' + c[0] + '" style="' + (c[0] ? 'background:' + c[0] : '') + '">' + c[1] + '</button>').join('') + '</div>' +
+        '<p class="pvhint">اضغط على الصفحة في المكان الذي تريد الكتابة فيه.</p>';
     }
     POP.innerHTML = h; POP.dataset.for = t; POP.hidden = false;
   }
@@ -246,12 +341,29 @@ export function mountPdf(root, o) {
     const p = pages[cur], after = p.li != null ? p.li : p.after, lbl = after < 0 ? 'قبل الصفحة 1' : 'بعد الصفحة ' + (after + 1);
     POP.innerHTML = '<div class="pvph"><b>صفحة ملاحظات جديدة</b><button type="button" class="pvx0" data-pop="close" aria-label="إغلاق">' + I.x + '</button></div>' +
       '<p class="pvnp">تُضاف صفحة فارغة خاصة بك <b>' + lbl + '</b> لتكتب فيها بالقلم أو بلوحة المفاتيح. تُحفظ في حسابك، ولا يراها غيرك، والدرس الأصلي لا يتغيّر.</p>' +
-      '<div class="pvpapers dk">' + PAPERS.map((x) => '<button type="button" data-paper="' + x[0] + '" data-after="' + after + '"><i class="pvsw paper-' + x[0] + '"></i><span>' + x[1] + '</span></button>').join('') + '</div>';
-    POP.dataset.for = 'new'; POP.hidden = false;
+      stylePicker('new', after);
+    POP.dataset.for = 'new'; POP.dataset.edit = ''; POP.hidden = false;
+  }
+  function editStylePop(id) {
+    setTool('');
+    let n = null; Object.keys(data.x || {}).forEach((a) => (data.x[a] || []).forEach((q) => { if (q.id === id) n = q; }));
+    if (!n) return;
+    st.tone = n.tone || 'white';
+    POP.innerHTML = '<div class="pvph"><b>إعدادات صفحة الملاحظات</b><button type="button" class="pvx0" data-pop="close" aria-label="إغلاق">' + I.x + '</button></div>' + stylePicker('edit', 0) +
+      '<button type="button" class="pvall" data-pdel="' + id + '">' + I.trash + ' حذف صفحة الملاحظات هذه</button>';
+    POP.querySelectorAll('[data-paper="' + (n.paper || 'lined') + '"]').forEach((b) => b.classList.add('on'));
+    POP.dataset.for = 'edit'; POP.dataset.edit = id; POP.hidden = false;
+  }
+  function setStyle(id, paper, tone) {
+    Object.keys(data.x || {}).forEach((a) => (data.x[a] || []).forEach((q) => { if (q.id === id) { if (paper) q.paper = paper; if (tone) q.tone = tone; } }));
+    build(); touch();
   }
   POP.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.paper) { const a = +b.dataset.after; closePop(); addNote(a, b.dataset.paper); return; }
+    if (b.dataset.tone) { st.tone = b.dataset.tone; keepLS(); POP.querySelectorAll('.pvtone2').forEach((x) => x.classList.toggle('on', x === b)); refreshThumbs(); if (POP.dataset.edit) setStyle(POP.dataset.edit, null, st.tone); return; }
+    if (b.dataset.paper) { if (POP.dataset.edit) { const id = POP.dataset.edit; closePop(); setStyle(id, b.dataset.paper, st.tone); return; } const a = +b.dataset.after; closePop(); addNote(a, b.dataset.paper, st.tone); return; }
+    if (b.dataset.tb != null) { st.tb = b.dataset.tb; keepLS(); POP.querySelectorAll('[data-tb]').forEach((x) => x.classList.toggle('on', x === b)); return; }
+    if (b.dataset.pdel) { if (b.dataset.sure) { const id = b.dataset.pdel; closePop(); delNote(id); } else { b.dataset.sure = '1'; b.textContent = 'اضغط مرة أخرى لتأكيد الحذف'; } return; }
     if (b.dataset.pop === 'close') closePop();
     else if (b.dataset.kind) { st.kind = b.dataset.kind; POP.querySelectorAll('.pvkind').forEach((x) => x.classList.toggle('on', x === b)); keepLS(); }
     else if (b.dataset.pc) { st.pc = b.dataset.pc; recol(b); }
@@ -280,6 +392,7 @@ export function mountPdf(root, o) {
   });
   BAR.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.act === 'page') { const p = pages[cur]; if (p && p.nid) { if (!POP.hidden && POP.dataset.for === 'edit') closePop(); else editStylePop(p.nid); } return; }
     if (b.dataset.act === 'undo') doUndo();
     else if (b.dataset.act === 'redo') doRedo();
     else if ('tool' in b.dataset) setTool(b.dataset.tool);
@@ -327,10 +440,11 @@ export function mountPdf(root, o) {
     if (st.tool === 'pen' || st.tool === 'hl') {
       const s = st.tool === 'pen' ? { t: 'p', k: st.kind, c: st.pc, w: +(st.pw * 0.6).toFixed(2), pts: q.slice() } : { t: 'h', c: st.hc, w: +(st.hw * 0.6).toFixed(2), pts: q.slice() };
       act = { kind: 'draw', p: p, s: s };
-      queue(p, (c, W, H) => drawStroke(c, s, W, H));
+      queue(p, (c, W, H) => drawStroke(c, s, W, H, null, p.dark));
     } else if (st.tool === 'er') { act = { kind: 'erase', p: p, op: { pg: p.k, add: [], del: [] }, last: q }; eraseAt(act, q); }
     else if (st.tool === 'lasso') { act = { kind: 'lasso', p: p, poly: q.slice() }; }
     else if (st.tool === 'laser') { act = { kind: 'laser', p: p }; laserAdd(e); }
+    else if (st.tool === 'sel') { if (p.li == null) { act = null; toast('هذه صفحة ملاحظاتك: استعمل أداة التحديد العادية'); return; } act = { kind: 'tsel', p: p, start: q, end: q }; }
   });
   function capture(e) { try { e.target.setPointerCapture(e.pointerId); } catch (x) {} }
   function one() { const v = Array.from(touches.values()); return v[v.length - 1]; }
@@ -345,7 +459,7 @@ export function mountPdf(root, o) {
     if (act.kind === 'draw') {
       const s = act.s, minD = 12;
       evs.forEach((ev) => { const q = pos(p, ev); const n = s.pts.length; if (Math.abs(q[0] - s.pts[n - 2]) + Math.abs(q[1] - s.pts[n - 1]) >= minD) s.pts.push(q[0], q[1]); });
-      queue(p, (c, W, H) => drawStroke(c, s, W, H));
+      queue(p, (c, W, H) => drawStroke(c, s, W, H, null, p.dark));
     } else if (act.kind === 'erase') {
       evs.forEach((ev) => {
         const q = pos(p, ev), l = act.last || q, d = Math.hypot(q[0] - l[0], q[1] - l[1]), n = Math.min(40, Math.ceil(d / 60));
@@ -357,6 +471,7 @@ export function mountPdf(root, o) {
     else if (act.kind === 'lasso') { const q = pos(p, e); act.poly.push(q[0], q[1]); queue(p, (c, W, H) => { c.save(); c.setLineDash([6, 5]); c.strokeStyle = '#2563eb'; c.lineWidth = 1.5 * (window.devicePixelRatio || 1); c.beginPath(); for (let k = 0; k < act.poly.length; k += 2) { const x = act.poly[k] / 10000 * W, y = act.poly[k + 1] / 10000 * H; k ? c.lineTo(x, y) : c.moveTo(x, y); } c.stroke(); c.restore(); }); }
     else if (act.kind === 'move') { const q = pos(p, e); sel.off = [(q[0] - act.start[0]) / 10000, (q[1] - act.start[1]) / 10000]; placeSelBox(); moveTexts(); queue(p); }
     else if (act.kind === 'laser') laserAdd(e);
+    else if (act.kind === 'tsel') { const q = pos(p, e); act.end = q; const a0 = act.start; queue(p, (c, W, H) => { c.save(); c.fillStyle = 'rgba(37,99,235,.12)'; c.strokeStyle = '#2563eb'; c.setLineDash([5, 4]); c.lineWidth = 1.5; const x = Math.min(a0[0], q[0]) / 1e4 * W, y = Math.min(a0[1], q[1]) / 1e4 * H, w = Math.abs(q[0] - a0[0]) / 1e4 * W, h = Math.abs(q[1] - a0[1]) / 1e4 * H; c.fillRect(x, y, w, h); c.strokeRect(x, y, w, h); c.restore(); }); }
     else if (act.kind === 'tap') { if (Math.abs(e.clientX - act.x) + Math.abs(e.clientY - act.y) > 12) act = null; }
   });
   const endPtr = (e) => {
@@ -375,6 +490,7 @@ export function mountPdf(root, o) {
     else if (a.kind === 'lasso') { makeSel(p, a.poly); }
     else if (a.kind === 'move') { finishMove(); }
     else if (a.kind === 'tap' && e.type === 'pointerup') { addText(p, a.start); }
+    else if (a.kind === 'tsel') { queue(p); makeTSel(p, a.start, a.end); }
   };
   DOC.addEventListener('pointerup', endPtr);
   DOC.addEventListener('pointercancel', endPtr);
@@ -455,8 +571,9 @@ export function mountPdf(root, o) {
     const pad = 120;
     sel = { pg: p.k, items: got, set: new Set(got), off: [0, 0], box: [x0 - pad, y0 - pad, x1 + pad, y1 + pad] };
     const el = document.createElement('div'); el.className = 'pvselbox';
-    el.innerHTML = '<div class="pvselbar"><button type="button" data-sel="del">' + I.trash + '<span>حذف</span></button></div>';
+    el.innerHTML = '<div class="pvselbar"><button type="button" data-sel="copy"><span>نسخ</span></button><button type="button" data-sel="del">' + I.trash + '<span>حذف</span></button></div>';
     p.lay.appendChild(el); sel.el = el; placeSelBox();
+    el.querySelector('[data-sel="copy"]').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); copyStrokes(); });
     el.querySelector('[data-sel="del"]').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); const op = { pg: p.k, add: [], del: sel.items.slice() }; sel = null; el.remove(); apply(op, false); commit(op); });
     renderBase(p); blit(p); renderTexts(p); p.lay.appendChild(el);
   }
@@ -476,7 +593,7 @@ export function mountPdf(root, o) {
 
   /* ---------- الكتابة بلوحة المفاتيح ---------- */
   function addText(p, q) {
-    const s = { t: 'x', x: q[0], y: Math.max(0, q[1] - 200), s: '', z: +(st.tz * 1.3).toFixed(1), c: st.tc };
+    const s = { t: 'x', x: q[0], y: Math.max(0, q[1] - 200), s: '', z: +(st.tz * 1.3).toFixed(1), c: st.tc }; if (st.tb) s.b = st.tb;
     items(p.k).push(s);
     const ta = textEl(p, s); p.lay.appendChild(ta);
     let first = true;
@@ -542,11 +659,12 @@ export function mountPdf(root, o) {
       scT = 0; const line = topOff() + window.innerHeight * 0.25;
       let best = cur;
       for (let i = 0; i < pages.length; i++) { const r = pages[i].fig.getBoundingClientRect(); if (r.top <= line && r.bottom > line) { best = i; break; } if (r.top > line) { best = Math.max(0, i - 1); break; } }
-      if (best !== cur) { cur = best; selPage.value = String(cur); try { localStorage.setItem(LK, pages[cur].k); } catch (e) {} if (o.onPage) o.onPage(cur); }
+      if (best !== cur) { cur = best; selPage.value = String(cur); syncPgBtn(); try { localStorage.setItem(LK, pages[cur].k); } catch (e) {} if (o.onPage) o.onPage(cur); }
     });
   }
   window.addEventListener('scroll', onScroll, { passive: true });
   selPage.addEventListener('change', () => { goPage(+selPage.value, false); });
+  $('[data-pv="paste"]').addEventListener('click', pasteStrokes);
   const NEWB = $('[data-pv="new"]');
   NEWB.addEventListener('click', newPagePop);
   let hintEl = null;
@@ -579,7 +697,16 @@ export function mountPdf(root, o) {
   function restoreStart() { const p = byKey[startK] || byKey['0']; cur = p.idx; selPage.value = String(cur); requestAnimationFrame(() => { if (cur) goPage(cur, false); }); }
   restoreStart();
 
+  window.__gcPdfCtx = () => {
+    const p = pages[cur]; if (!p) return null;
+    if (p.li == null) return { label: ch.ar + ' · صفحة ملاحظات', text: '', key: 'pdf' + ch.id + p.k };
+    loadTX();
+    const L = TX && TX[p.li] ? TX[p.li].map((l) => l[4]).join('\n') : '';
+    return { label: ch.en + ' · ' + ch.ar + ' · صفحة ' + (p.li + 1) + ' / ' + N, text: L, key: 'pdf' + ch.id + '_' + p.li + (L ? 't' : '') };
+  };
+  loadTX();
   return function destroy() {
+    window.__gcPdfCtx = null;
     flush();
     dead = true;
     io.disconnect(); ro.disconnect();

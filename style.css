@@ -1222,7 +1222,7 @@ html[data-theme="dark"] .lesson .call.note{--k2:#a99cff}
   .pvb{width:42px;height:42px}
   .pvb svg{width:23px;height:23px}
 }
-@media (max-width:420px){.pvbar{gap:0;padding:5px}.pvb{width:38px;height:38px}.pvb svg{width:22px;height:22px}.pvb .dot{right:6px;bottom:4px}}
+@media (max-width:420px){.pvbar{gap:0;padding:4px}.pvb{width:35px;height:38px}.pvb svg{width:22px;height:22px}.pvb .dot{right:6px;bottom:4px}}
 @media print{.pv{display:none!important}}
 /* v57: صفحات ملاحظات يضيفها الطالب بين صفحات الدرس */
 .pvadd{position:relative;display:flex;flex-direction:column;align-items:center;padding:6px 0;min-height:30px}
@@ -1246,7 +1246,6 @@ html[data-theme="dark"] .lesson .call.note{--k2:#a99cff}
 .pvp.note{border:2px solid #93c5fd;box-shadow:0 3px 14px rgba(37,99,235,.18)}
 .pvnhead{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 10px;background:rgba(219,234,254,.92);color:#1e3a8a;font:700 12.5px Cairo,sans-serif;pointer-events:none}
 .pvndel{pointer-events:auto;border:1px solid #fca5a5;background:#fff;color:#b91c1c;border-radius:8px;padding:2px 10px;font:600 12px Cairo,sans-serif;cursor:pointer}
-html[data-theme="dark"] .pvp.note{background-color:#fffdf8}
 /* v58: زر واحد لإضافة صفحة ملاحظات في الشريط العلوي */
 .pvtop{position:sticky}
 .pvnew{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 12px 0 10px;border:1.5px solid #2563eb;border-radius:10px;background:color-mix(in srgb,#2563eb 8%,var(--card));color:#2563eb;font:700 13px Cairo,sans-serif;cursor:pointer;flex:none;white-space:nowrap}
@@ -1259,3 +1258,107 @@ html[data-theme="dark"] .pvp.note{background-color:#fffdf8}
 .pvhintb button{flex:none;border:0;border-radius:8px;background:#fff;color:#1e3a8a;font:700 12.5px Cairo,sans-serif;padding:5px 10px;cursor:pointer}
 @media (max-width:600px){.pvnew{padding:0 8px;gap:4px}.pvnew .tx{font-size:12px}}
 @media (max-width:420px){.pvttl{display:none}.pvtop{justify-content:space-between}.pvnew .tx{font-size:11.5px}.pvsel{max-width:84px}}
+
+/* v59: علامة صغيرة لصفحة الملاحظات بدل الشريط الكبير */
+.pvnhead{display:none}
+.pvntag{position:absolute;top:6px;right:8px;z-index:5;padding:2px 8px;border-radius:20px;background:rgba(219,234,254,.9);color:#1e3a8a;font:700 clamp(10px,calc(var(--pw,800px)*0.016),12.5px)/1.5 Cairo,sans-serif;pointer-events:none}
+.pvndel{position:absolute;top:5px;left:6px;z-index:5;display:inline-flex;align-items:center;gap:4px;height:26px;min-width:26px;padding:0 5px;border:1px solid #fecaca;border-radius:8px;background:rgba(255,255,255,.9);color:#b91c1c;font:600 11.5px Cairo,sans-serif;cursor:pointer;pointer-events:auto}
+.pvndel svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.pvndel.sure{background:#fee2e2;border-color:#f87171}
+/* v59: لون ورقة الملاحظات (بيضاء / صفراء / سوداء) */
+.pvp.note.tone-white,.pvsw.tone-white{background-color:#fffdf8}
+.pvp.note.tone-yellow,.pvsw.tone-yellow{background-color:#fff3b8}
+.pvp.note.tone-black,.pvsw.tone-black{background-color:#16181d}
+.paper-lined.tone-yellow{background-image:repeating-linear-gradient(to bottom,transparent 0,transparent calc(var(--pw,800px)*0.034 - 1px),#e2cf7a calc(var(--pw,800px)*0.034 - 1px),#e2cf7a calc(var(--pw,800px)*0.034))}
+.paper-grid.tone-yellow{background-image:linear-gradient(#ead98f 1px,transparent 1px),linear-gradient(90deg,#ead98f 1px,transparent 1px)}
+.paper-lined.tone-black{background-image:repeating-linear-gradient(to bottom,transparent 0,transparent calc(var(--pw,800px)*0.034 - 1px),#343a46 calc(var(--pw,800px)*0.034 - 1px),#343a46 calc(var(--pw,800px)*0.034))}
+.paper-grid.tone-black{background-image:linear-gradient(#2c313b 1px,transparent 1px),linear-gradient(90deg,#2c313b 1px,transparent 1px)}
+.pvsw.paper-lined.tone-yellow{background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 7px,#e2cf7a 7px,#e2cf7a 8px)}
+.pvsw.paper-lined.tone-black{background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 7px,#3a414e 7px,#3a414e 8px)}
+.pvsw.paper-grid.tone-yellow{background-size:8px 8px}
+.pvsw.paper-grid.tone-black{background-size:8px 8px}
+.pvp.note.tone-black{border-color:#475569}
+.pvp.note.tone-black .wm{opacity:.5}
+.pvnl{margin:4px 0 8px;font:700 13px Cairo,sans-serif;color:#d1d5db}
+.pvnl small{font-weight:600;color:#9ca3af}
+.pvtones{display:flex;gap:10px;margin-bottom:12px}
+.pvtone{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px;border:1.5px solid #3a3f46;border-radius:12px;background:#30343a;color:#f3f4f6;font:600 12px Cairo,sans-serif;cursor:pointer}
+.pvtone.on{border-color:#60a5fa;background:#363b42}
+.pvtone .pvsw{width:44px;height:30px}
+.pvcol[data-pc="#ffffff"],.pvcol[data-tc="#ffffff"]{border-color:#9ca3af}
+
+/* v60: أنواع وألوان الورق مثل تطبيقات الملاحظات + ملصقات ملوّنة */
+.pvp.note.dark{border-color:#475569}
+.pvp.note.dark .wm{opacity:.5}
+.pvntag{pointer-events:auto;border:0;cursor:pointer}
+.pvtones2{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px;direction:ltr}
+.pvtone2{aspect-ratio:1;border-radius:50%;border:2px solid #3a3f46;cursor:pointer;padding:0}
+.pvtone2.on{box-shadow:0 0 0 3px #26292e,0 0 0 5px #60a5fa}
+.pvstyles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-height:46vh;overflow:auto;padding:2px}
+.pvstyles button{display:flex;flex-direction:column;align-items:center;gap:6px;padding:6px 4px 8px;border:1.5px solid #3a3f46;border-radius:12px;background:#30343a;color:#f3f4f6;font:600 11.5px/1.3 Cairo,sans-serif;cursor:pointer}
+.pvstyles button.on,.pvstyles button:hover{border-color:#60a5fa}
+.pvthumb{display:block;width:100%;aspect-ratio:3/4;border-radius:6px;border:1px solid #4b5058}
+.pvtbs{display:flex;gap:8px;flex-wrap:wrap;direction:ltr}
+.pvtb{min-width:40px;height:34px;border-radius:8px;border:2px solid #3a3f46;background:#30343a;color:#e5e7eb;font:600 12px Cairo,sans-serif;cursor:pointer;padding:0 8px}
+.pvtb.on{border-color:#60a5fa;box-shadow:0 0 0 2px #60a5fa}
+.pvx.stick{padding:8px 10px;border:0;border-radius:4px;box-shadow:0 3px 10px rgba(0,0,0,.18);color:#1f2937}
+.pv[data-tool="text"] .pvx.stick{outline:1px dashed rgba(37,99,235,.5)}
+@media (max-width:420px){.pvstyles{grid-template-columns:repeat(3,1fr)}.pvtones2{grid-template-columns:repeat(6,1fr)}}
+.pvstyles{grid-template-columns:repeat(4,1fr);gap:8px}
+.pvthumb{aspect-ratio:4/5}
+.pvpop{max-height:calc(100vh - var(--top) - 160px)}
+@media (max-width:420px){.pvstyles{grid-template-columns:repeat(4,1fr);gap:6px}.pvstyles button{font-size:10.5px;padding:4px 3px 6px}}
+/* v62: إعدادات صفحة الملاحظات في شريط الأدوات */
+.pvall{display:flex;align-items:center;justify-content:center;gap:8px}
+.pvall svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.pvb.pvpg{color:#93c5fd;box-shadow:inset 0 0 0 1.5px #3b82f6}
+
+/* v63: تحديد نص من الدرس + نسخ/لصق كتابة الطالب */
+.pv[data-tool="sel"] .pvp canvas{pointer-events:auto;touch-action:none;cursor:text}
+.pvtsel{position:absolute;inset:0;pointer-events:none}
+.pvtsel i{position:absolute;background:rgba(37,99,235,.22);border-radius:2px;outline:1px solid rgba(37,99,235,.45)}
+.pvtbar{position:absolute;left:50%;transform:translate(-50%,calc(-100% - 6px));display:flex;align-items:center;gap:2px;padding:4px;border-radius:10px;background:#1f2328;box-shadow:0 6px 18px rgba(0,0,0,.3);pointer-events:auto;white-space:nowrap;z-index:6}
+.pvtbar button{border:0;background:transparent;color:#fff;font:600 12.5px Cairo,sans-serif;padding:6px 9px;border-radius:7px;cursor:pointer}
+.pvtbar button:hover{background:#3a3f46}
+.pvtbar span{color:#9ca3af;font-size:11px;padding:0 6px}
+.pvtoast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:70;background:#111827;color:#fff;font:600 13px Cairo,sans-serif;padding:8px 14px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+.pvpaste{border-color:#16a34a;color:#16a34a;background:color-mix(in srgb,#16a34a 8%,var(--card))}
+/* v65: مساعد Gemini داخل الموقع */
+#gcai{position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:80;font-family:Cairo,sans-serif}
+body.pdfmode #gcai{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+.aifab{display:flex;align-items:center;gap:6px;height:46px;padding:0 16px 0 14px;border:0;border-radius:24px;background:linear-gradient(135deg,#4f46e5,#7c3aed 55%,#db2777);color:#fff;font:700 14px Cairo,sans-serif;box-shadow:0 8px 24px rgba(79,70,229,.4);cursor:pointer}
+.aifab span{font-size:18px}
+#gcai.on .aifab{display:none}
+@media (max-width:600px){body.pdfmode .aifab b{display:none}body.pdfmode .aifab{width:46px;padding:0;justify-content:center}}
+.aipanel{position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:min(420px,calc(100vw - 32px));height:min(620px,calc(100vh - var(--top) - 40px));display:flex;flex-direction:column;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px rgba(10,26,51,.3);overflow:hidden}
+.aipanel[hidden]{display:none}
+@media (max-width:600px){.aipanel{left:0;right:0;bottom:0;width:100%;height:78vh;border-radius:18px 18px 0 0}}
+.aipanel header{display:flex;align-items:center;gap:6px;padding:10px 12px;background:linear-gradient(135deg,#4f46e5,#7c3aed 55%,#db2777);color:#fff}
+.aipanel header div{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.aipanel header b{font-size:15px}
+.aictx{font-size:11.5px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aix{flex:none;width:34px;height:34px;border:0;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;font-size:16px;cursor:pointer}
+.aimsgs{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px;-webkit-user-select:text;user-select:text}
+.aiwel p{margin:0 0 10px;font-size:13.5px;color:var(--mut);line-height:1.7}
+.aisugg{display:flex;flex-wrap:wrap;gap:6px}
+.aisugg button{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:16px;padding:6px 12px;font:600 12.5px Cairo,sans-serif;cursor:pointer}
+.aim{max-width:88%;padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.75}
+.aim p{margin:0 0 6px}.aim p:last-child{margin:0}
+.aim ul{margin:4px 0;padding-inline-start:18px}
+.aim .aih{font-weight:800;margin-top:6px}
+.aim code{background:rgba(0,0,0,.06);padding:0 4px;border-radius:4px}
+.aim.me{align-self:flex-start;background:#4f46e5;color:#fff;border-bottom-right-radius:4px}
+.aim.me blockquote{margin:0 0 6px;padding:4px 8px;border-inline-start:3px solid rgba(255,255,255,.6);font-size:12.5px;opacity:.9}
+.aim.bot{align-self:flex-end;background:var(--bg);border:1px solid var(--line);border-bottom-left-radius:4px}
+.aim.err{border-color:#fca5a5;color:#b91c1c}
+.aiwait{color:var(--mut);animation:aiw 1.2s infinite}
+@keyframes aiw{50%{opacity:.4}}
+.aiquote{display:flex;align-items:center;gap:6px;margin:0 10px;padding:6px 10px;border-radius:10px;background:color-mix(in srgb,#4f46e5 10%,var(--bg));font-size:12.5px}
+.aiquote[hidden]{display:none}
+.aiquote span{flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.aiquote button{border:0;background:transparent;color:var(--mut);cursor:pointer}
+.aiform{display:flex;gap:8px;align-items:flex-end;padding:10px}
+.aiform textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:14px;padding:9px 12px;font:500 14px Cairo,sans-serif;background:var(--bg);color:var(--ink);max-height:120px;-webkit-user-select:text;user-select:text}
+.aiform button{flex:none;width:42px;height:42px;border:0;border-radius:50%;background:#4f46e5;color:#fff;font-size:17px;cursor:pointer}
+.ainote{margin:0;padding:0 12px 10px;font-size:11px;color:var(--mut);display:flex;justify-content:space-between;gap:8px}
+@media print{#gcai{display:none!important}}

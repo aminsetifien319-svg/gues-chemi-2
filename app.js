@@ -3,10 +3,10 @@ import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing,
   YEAR, YEAR_EXPLICIT, YEAR_AR, YEAR_EN, hasYear, switchYear, loadNotes, saveNotes
-} from './firebase.js?v=58';
-import { mountPdf } from './pdfv.js?v=58';
-import { fmt, typeset } from './rich.js?v=58';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=58';
+} from './firebase.js?v=65';
+import { mountPdf } from './pdfv.js?v=65';
+import { fmt, typeset } from './rich.js?v=65';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=65';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -217,7 +217,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 58;
+const APP_V = 65;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -333,6 +333,7 @@ function start(remote) {
   prog = merge(readLocal(), remote);
   revRes = {}; revLists = {}; quizSel = {};
   ready = true;
+  startAI();
   save(true);
   GATE.hidden = true; GATE.innerHTML = '';
   VIEW.hidden = false; SIDE.hidden = false; $('#menuBtn').hidden = false; $('#searchBtn').hidden = false;
@@ -784,6 +785,23 @@ function chapter(ch) {
 /* =================================================================
    صفحة الدرس (نص + صور توضيحية، أو الصفحة الأصلية)
    ================================================================= */
+/* مساعد Gemini: يُحمَّل عند أول ضغطة فقط */
+let aiOn = false;
+function startAI() {
+  if (aiOn) return; aiOn = true;
+  import('./ai.js?v=65').then((m) => m.mountAI({
+    email: () => (me && me.email) || '',
+    getCtx: () => {
+      if (window.__gcPdfCtx) { try { const c = window.__gcPdfCtx(); if (c) return c; } catch (e) {} }
+      const r = parse(); const ch = r.ch;
+      if (!ch) return { label: 'Gues Chemi', text: '', key: 'home' };
+      let lab = ch.en + ' · ' + ch.ar, key = 'c' + ch.id;
+      if (r.v === 'page') { const p = FLOW[ch.id][r.i]; lab += ' · ' + (p.secAr || '') + ' · ' + (p.t || ''); key += 'p' + p.n; }
+      if (r.v === 'quiz') { lab += ' · كيسيام ' + (r.set.ar || '') + ' · السؤال ' + (r.i + 1); key += 'q' + r.i; }
+      return { label: lab, text: '', key: key };
+    }
+  })).catch(() => { aiOn = false; });
+}
 /* الدرس PDF: الصفحات صور محمية + أدوات كتابة، والملاحظات تُحفظ في حساب الطالب */
 function pdfPage(ch, i) {
   if (!readP('f' + ch.id)) { prog.r['f' + ch.id] = now(); save(); }
@@ -1531,7 +1549,7 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('keydown', (e) => {
   const k = (e.key || '').toLowerCase();
   const typing = /input|textarea|select/i.test((e.target.tagName || ''));
-  if ((e.ctrlKey || e.metaKey) && ['c', 'x', 's', 'p', 'u'].indexOf(k) >= 0 && !(typing && ['c', 'x'].indexOf(k) >= 0)) { e.preventDefault(); return; }
+  if ((e.ctrlKey || e.metaKey) && ['c', 'x', 's', 'p', 'u'].indexOf(k) >= 0 && !(typing && ['c', 'x'].indexOf(k) >= 0) && !(k === 'c' && (window.getSelection() + '') && document.getSelection().anchorNode && document.getSelection().anchorNode.parentElement && document.getSelection().anchorNode.parentElement.closest('.aimsgs'))) { e.preventDefault(); return; }
   if ((e.ctrlKey || e.metaKey) && k === 'a' && !typing) { e.preventDefault(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (!$('#viewer').hidden) { if (k === 'escape') closeViewer(); else if (k === '+' || k === '=') { vz = Math.min(ZL.length - 1, vz + 1); layoutViewer(); } else if (k === '-') { vz = Math.max(0, vz - 1); layoutViewer(); } return; }
@@ -1552,6 +1570,7 @@ document.addEventListener('keydown', (e) => {
 
 ['contextmenu', 'copy', 'cut', 'dragstart', 'selectstart'].forEach((ev) => document.addEventListener(ev, (e) => {
   if (/input|textarea/i.test((e.target && e.target.tagName) || '')) return;
+  if (ev !== 'contextmenu' && e.target && e.target.closest && e.target.closest('.aimsgs')) return;   // يُسمح بنسخ أجوبة Gemini
   e.preventDefault();
 }));
 

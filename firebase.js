@@ -7,7 +7,7 @@ import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache,
   doc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-import * as CFG from './firebase-config.js?v=66';
+import * as CFG from './firebase-config.js?v=68';
 const firebaseConfig = CFG.firebaseConfig;
 
 export const configMissing = !firebaseConfig.apiKey || String(firebaseConfig.apiKey).indexOf('PASTE') === 0;
@@ -151,6 +151,17 @@ export async function loadNotes(email, cid) {
 }
 export async function saveNotes(email, cid, json) {
   await setDoc(doc(db, C('notes'), lower(email), 'ch', String(cid)), { json: json, updatedAt: serverTimestamp() });
+}
+
+// صور وتسجيلات الطالب داخل ملاحظاته (كل ملف وثيقة مستقلة، خاصة به)
+export async function loadMedia(email, id) {
+  const ref = doc(db, C('notesm'), lower(email), 'm', id);
+  const s = await getDocFromCache(ref).catch(() => getDoc(ref));
+  if (!s.exists()) throw new Error('missing media');
+  return s.data().d;
+}
+export async function saveMedia(email, id, d) {
+  await setDoc(doc(db, C('notesm'), lower(email), 'm', id), { d: d, updatedAt: serverTimestamp() });
 }
 
 /* ---------- الأجهزة (جهازان كحد أقصى لكل حساب) ---------- */

@@ -20,6 +20,7 @@ const I = {
   laser: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></svg>',
   hand: '<svg viewBox="0 0 24 24"><path d="M8 12V5.5a1.5 1.5 0 0 1 3 0V11M11 10.5V4a1.5 1.5 0 0 1 3 0v6.5M14 10.5V5.5a1.5 1.5 0 0 1 3 0V13"/><path d="M17 9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1a6.5 6.5 0 0 1-5.2-2.6L4 14.6a1.5 1.5 0 0 1 2.3-1.9L8 14.5"/></svg>',
   x: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  plus: '<svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M12 8v8M8 12h8"/></svg>',
   sel: '<svg viewBox="0 0 24 24"><path d="M4 6V4h2M18 4h2v2M20 18v2h-2M6 20H4v-2"/><path d="M9 8h6M12 8v8M10.5 16h3"/></svg>',
   pagecfg: '<svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/><path d="M14 3v5h5"/><path d="M19 8v3"/><circle cx="17.5" cy="17.5" r="2.2"/><path d="M17.5 13.5v1.3M17.5 20.2v1.3M13.5 17.5h1.3M20.2 17.5h1.3M14.7 14.7l.9.9M19.4 19.4l.9.9M14.7 20.3l.9-.9M19.4 15.6l.9-.9"/></svg>',
   trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>'
@@ -51,7 +52,7 @@ export function mountPdf(root, o) {
     '<div class="pvbar" role="toolbar" aria-label="أدوات الكتابة">' +
     btn('text', 'كتابة بلوحة المفاتيح') + btn('pen', 'قلم') + btn('hl', 'قلم تظليل') + btn('er', 'ممحاة') + btn('lasso', 'تحديد') + (ch.pdfT ? btn('sel', 'تحديد نص من الدرس (نسخ، Google، Gemini)') : '') +
     '<button type="button" class="pvb" data-act="undo" aria-label="تراجع" disabled>' + I.undo + '</button><button type="button" class="pvb" data-act="redo" aria-label="إعادة" disabled>' + I.redo + '</button>' +
-    btn('laser', 'مؤشر ليزر') + '<button type="button" class="pvb on" data-tool="" aria-label="قراءة وتمرير">' + I.hand + '</button>' +
+    '<button type="button" class="pvb" data-act="ins" aria-label="إدراج" title="إدراج: صورة، كاميرا، تسجيل صوتي، جدول، ملصق">' + I.plus + '</button>' + btn('laser', 'مؤشر ليزر') + '<button type="button" class="pvb on" data-tool="" aria-label="قراءة وتمرير">' + I.hand + '</button>' +
     '<button type="button" class="pvb pvpg" data-act="page" aria-label="إعدادات صفحة الملاحظات" title="إعدادات صفحة الملاحظات (اللون، النوع، الحذف)" hidden>' + I.pagecfg + '</button></div></div>';
   function btn(t, l) { return '<button type="button" class="pvb" data-tool="' + t + '" aria-label="' + l + '" title="' + l + '">' + I[t] + (t === 'pen' || t === 'hl' || t === 'text' ? '<i class="dot"></i>' : '') + '</button>'; }
 
@@ -235,10 +236,164 @@ export function mountPdf(root, o) {
   function pasteStrokes() {
     if (!clip) return; const p = pages[cur]; if (!p) return;
     clearSel();
-    const add = clip.map((s) => s.t === 'x' ? Object.assign({}, s, { x: Math.min(9000, s.x + 150), y: Math.min(9500, s.y + 150) }) : Object.assign({}, s, { pts: s.pts.map((v, k) => Math.min(10000, v + 150)) }));
+    const add = clip.map((s) => !s.pts ? Object.assign({}, s, { x: Math.min(9000, s.x + 150), y: Math.min(9500, s.y + 150) }) : Object.assign({}, s, { pts: s.pts.map((v, k) => Math.min(10000, v + 150)) }));
     const op = { pg: p.k, add: add, del: [] }; apply(op, false); commit(op);
   }
   function syncPaste() { const b = $('[data-pv="paste"]'); if (b) b.hidden = !clip; }
+
+  /* ---------- إدراج: صورة، كاميرا، تسجيل صوتي، جدول، ملصق ---------- */
+  const MEDIA = {};   // id -> Promise(dataURL)
+  const media = (id) => MEDIA[id] || (MEDIA[id] = o.loadMedia(id).catch((e) => { delete MEDIA[id]; throw e; }));
+  const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  let objSel = null;
+  function placeObj(p, s) {   // مكان العنصر الجديد: وسط الجزء الظاهر من الصفحة
+    const r = p.fig.getBoundingClientRect(), vh = window.innerHeight;
+    const cy = Math.max(r.top, 0) + (Math.min(r.bottom, vh) - Math.max(r.top, 0)) / 2;
+    s.x = Math.round((10000 - s.w) / 2); s.y = Math.max(0, Math.min(10000 - (s.h || 1500), Math.round((cy - r.top) / r.height * 10000 - (s.h || 1500) / 2)));
+    const L = data.p[p.k] || [];
+    for (let k = 0; k < 8 && L.some((q) => !q.pts && Math.abs(q.x - s.x) < 600 && Math.abs(q.y - s.y) < 600); k++) { s.x = Math.max(0, Math.min(10000 - s.w, s.x + 700)); s.y = Math.max(0, Math.min(9200, s.y + 700)); }
+  }
+  function addObj(s) { const p = pages[cur]; if (!p) return; placeObj(p, s); const op = { pg: p.k, add: [s], del: [] }; apply(op, false); commit(op); }
+  function objEl(p, s) {
+    const el = document.createElement('div'); el.className = 'pvobj pv-' + s.t; el._s = s;
+    el.style.left = s.x / 100 + '%'; el.style.top = s.y / 100 + '%'; el.style.width = s.w / 100 + '%';
+    if (s.h) el.style.height = s.h / 100 + '%';
+    if (s.t === 'i') {
+      el.innerHTML = '<span class="sk">…</span>';
+      media(s.m).then((src) => { el.innerHTML = ''; const im = new Image(); im.src = src; im.alt = ''; im.draggable = false; el.appendChild(im); }).catch(() => { el.innerHTML = '<span class="sk">تعذّر تحميل الصورة</span>'; });
+    } else if (s.t === 'a') {
+      el.innerHTML = '<button type="button" class="pvplay">▶</button><span class="pvdur lat">' + fmtDur(s.d || 0) + '</span><i class="pvwave"></i>';
+      el.querySelector('.pvplay').addEventListener('click', (e) => { e.stopPropagation(); playAudio(el, s); });
+    } else if (s.t === 'tb') {
+      const g = document.createElement('div'); g.className = 'pvgrid'; g.style.gridTemplateColumns = 'repeat(' + s.c + ',1fr)';
+      for (let i = 0; i < s.r * s.c; i++) {
+        const inp = document.createElement('textarea'); inp.rows = 1; inp.dir = 'auto'; inp.value = (s.v && s.v[i]) || ''; inp.className = i < s.c ? 'hd' : '';
+        inp.addEventListener('input', () => { s.v = s.v || []; s.v[i] = inp.value; touch(); });
+        inp.addEventListener('pointerdown', (e) => e.stopPropagation());
+        g.appendChild(inp);
+      }
+      el.appendChild(g);
+    }
+    el.addEventListener('pointerdown', (e) => { if (st.tool && st.tool !== 'lasso') return; e.stopPropagation(); selectObj(p, el); });
+    return el;
+  }
+  function fmtDur(t) { t = Math.round(t); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); }
+  let playing = null;
+  function playAudio(el, s) {
+    if (playing) { playing.a.pause(); playing.el.classList.remove('on'); const same = playing.el === el; playing = null; if (same) return; }
+    media(s.m).then((src) => { const a = new Audio(src); playing = { a: a, el: el }; el.classList.add('on'); a.onended = () => { el.classList.remove('on'); playing = null; }; a.play().catch(() => { el.classList.remove('on'); playing = null; }); });
+  }
+  function selectObj(p, el) {
+    deselectObj();
+    objSel = { p: p, el: el, s: el._s };
+    el.classList.add('sel');
+    const h = document.createElement('div'); h.className = 'pvobjbar';
+    h.innerHTML = '<span class="mv" title="تحريك">✥</span><button type="button" data-o="del" title="حذف">' + I.trash + '</button>';
+    el.appendChild(h);
+    const rz = document.createElement('span'); rz.className = 'pvrz'; rz.title = 'تكبير/تصغير'; el.appendChild(rz);
+    h.querySelector('[data-o="del"]').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); const s = objSel.s, pg = p.k; deselectObj(); const op = { pg: pg, add: [], del: [s] }; apply(op, false); commit(op); });
+    const drag = (mode) => (e) => {
+      e.stopPropagation(); e.preventDefault();
+      const s = objSel.s, r = p.fig.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY, sx = s.x, sy = s.y, sw = s.w, sh = s.h || 0;
+      const ratio = s.t === 'i' && sh ? sh / sw : 0;
+      const mv = (ev) => {
+        const dx = (ev.clientX - x0) / r.width * 10000, dy = (ev.clientY - y0) / r.height * 10000;
+        if (mode === 'm') { const hh = (el.offsetHeight / r.height) * 10000, ww = (el.offsetWidth / r.width) * 10000; el.style.left = Math.max(0, Math.min(10000 - ww, sx + dx)) / 100 + '%'; el.style.top = Math.max(0, Math.min(10000 - hh, sy + dy)) / 100 + '%'; }
+        else { const w = Math.max(800, Math.min(10000, sw + dx)); el.style.width = w / 100 + '%'; if (ratio) el.style.height = (w * ratio * r.width / r.height) / 100 + '%'; }
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up);
+        const ns = Object.assign({}, s, { x: Math.round(parseFloat(el.style.left) * 100), y: Math.round(parseFloat(el.style.top) * 100), w: Math.round(parseFloat(el.style.width) * 100) });
+        if (el.style.height) ns.h = Math.round(parseFloat(el.style.height) * 100);
+        if (ns.x === s.x && ns.y === s.y && ns.w === s.w) return;
+        const L = items(p.k), k = L.indexOf(s); if (k < 0) return;
+        L[k] = ns; el._s = ns; objSel.s = ns; commit({ pg: p.k, add: [ns], del: [s] });
+      };
+      window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+    };
+    h.querySelector('.mv').addEventListener('pointerdown', drag('m'));
+    rz.addEventListener('pointerdown', drag('r'));
+  }
+  function deselectObj() { if (!objSel) return; const el = objSel.el; el.classList.remove('sel'); el.querySelectorAll('.pvobjbar,.pvrz').forEach((x) => x.remove()); objSel = null; }
+  document.addEventListener('pointerdown', (e) => { if (objSel && !e.target.closest('.pvobj')) deselectObj(); }, true);
+
+  function shrinkImage(file) {
+    return new Promise((res, rej) => {
+      const url = URL.createObjectURL(file), im = new Image();
+      im.onload = () => {
+        const k = Math.min(1, 1400 / Math.max(im.naturalWidth, im.naturalHeight));
+        const w = Math.round(im.naturalWidth * k), h = Math.round(im.naturalHeight * k);
+        const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(im, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        let q = 0.78, d = c.toDataURL('image/jpeg', q);
+        while (d.length > 700000 && q > 0.35) { q -= 0.12; d = c.toDataURL('image/jpeg', q); }
+        res({ d: d, w: w, h: h });
+      };
+      im.onerror = () => { URL.revokeObjectURL(url); rej(new Error('img')); };
+      im.src = url;
+    });
+  }
+  async function insertImage(file) {
+    if (!file) return;
+    toast('جارٍ إضافة الصورة…');
+    try {
+      const r = await shrinkImage(file), id = newId();
+      await o.saveMedia(id, r.d); MEDIA[id] = Promise.resolve(r.d);
+      const p = pages[cur], pr = p.fig.clientHeight / p.fig.clientWidth, w = 4500;
+      addObj({ t: 'i', m: id, w: w, h: Math.round(w * (r.h / r.w) / pr) });
+      toast('أُضيفت الصورة');
+    } catch (e) { toast('تعذّر حفظ الصورة. حاول بصورة أصغر'); }
+  }
+  function pickImage(camera) {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; if (camera) inp.setAttribute('capture', 'environment');
+    inp.style.display = 'none'; document.body.appendChild(inp);
+    inp.addEventListener('change', () => { insertImage(inp.files && inp.files[0]); inp.remove(); });
+    inp.click();
+  }
+  /* تسجيل صوتي (حتى 90 ثانية) */
+  let rec = null;
+  async function toggleRecord() {
+    if (rec) { rec.stop(); return; }
+    if (!navigator.mediaDevices || !window.MediaRecorder) { toast('التسجيل الصوتي غير مدعوم في هذا المتصفح'); return; }
+    let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { toast('اسمح للموقع باستعمال الميكروفون'); return; }
+    const mt = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg'].find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+    const mr = new MediaRecorder(stream, mt ? { mimeType: mt, audioBitsPerSecond: 24000 } : { audioBitsPerSecond: 24000 });
+    const chunks = [], t0 = Date.now(), bar = document.createElement('div');
+    bar.className = 'pvrec'; bar.innerHTML = '<i></i><span class="lat">0:00</span><button type="button">إيقاف وحفظ</button>'; PV.appendChild(bar);
+    const tick = setInterval(() => { const s = (Date.now() - t0) / 1000; bar.querySelector('span').textContent = fmtDur(s); if (s >= 90) mr.stop(); }, 250);
+    bar.querySelector('button').addEventListener('click', () => mr.stop());
+    mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    mr.onstop = async () => {
+      clearInterval(tick); bar.remove(); stream.getTracks().forEach((t) => t.stop()); rec = null;
+      const dur = (Date.now() - t0) / 1000; if (dur < 0.7 || !chunks.length) return;
+      const blob = new Blob(chunks, { type: mr.mimeType || mt || 'audio/webm' });
+      const d = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+      if (d.length > 950000) { toast('التسجيل طويل جداً'); return; }
+      const id = newId();
+      try { await o.saveMedia(id, d); MEDIA[id] = Promise.resolve(d); addObj({ t: 'a', m: id, w: 2600, h: 700, d: Math.round(dur) }); toast('حُفظ التسجيل'); }
+      catch (e) { toast('تعذّر حفظ التسجيل'); }
+    };
+    rec = mr; mr.start(500);
+  }
+  function insertMenu() {
+    if (!POP.hidden && POP.dataset.for === 'ins') { closePop(); return; }
+    setTool('');
+    POP.innerHTML = '<div class="pvph"><b>إدراج في الصفحة</b><button type="button" class="pvx0" data-pop="close" aria-label="إغلاق">' + I.x + '</button></div><div class="pvins">' +
+      [['img', '🖼️', 'صورة من المعرض'], ['cam', '📷', 'الكاميرا'], ['rec', '🎙️', 'تسجيل صوتي'], ['tbl', '▦', 'جدول'], ['stk', '🗒️', 'ملصق (Sticky)'], ['page', '📄', 'صفحة ملاحظات']].map((x) => '<button type="button" data-ins="' + x[0] + '"><span>' + x[1] + '</span>' + x[2] + '</button>').join('') +
+      '</div><div class="pvtblcfg" hidden><p class="pvnl">حجم الجدول</p><div class="pvrng2"><label>صفوف <select data-tr>' + [2, 3, 4, 5, 6, 8, 10].map((n) => '<option' + (n === 3 ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></label><label>أعمدة <select data-tc>' + [2, 3, 4, 5].map((n) => '<option' + (n === 2 ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></label><button type="button" class="pvok" data-ins="tblok">إضافة</button></div></div>';
+    POP.dataset.for = 'ins'; POP.hidden = false;
+  }
+  POP.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ins]'); if (!b) return;
+    const k = b.dataset.ins;
+    if (k === 'img') { closePop(); pickImage(false); }
+    else if (k === 'cam') { closePop(); pickImage(true); }
+    else if (k === 'rec') { closePop(); toggleRecord(); }
+    else if (k === 'tbl') { POP.querySelector('.pvtblcfg').hidden = false; }
+    else if (k === 'tblok') { const r = +POP.querySelector('[data-tr]').value, c = +POP.querySelector('[data-tc]').value; closePop(); addObj({ t: 'tb', r: r, c: c, w: Math.min(9000, 2200 * c), v: [] }); }
+    else if (k === 'stk') { closePop(); st.tb = st.tb || '#fef08a'; keepLS(); setTool('text'); toast('اضغط على الصفحة لكتابة الملصق'); }
+    else if (k === 'page') { closePop(); newPagePop(); }
+  });
 
   /* ---------- الرسم ---------- */
   const DARK = (c) => c === '#111827' || c === '#000000';
@@ -270,7 +425,7 @@ export function mountPdf(root, o) {
   function blit(p, extra) {
     const c = p.ctx, W = p.cv.width, H = p.cv.height; if (!W) return;
     c.clearRect(0, 0, W, H); c.drawImage(p.base, 0, 0);
-    if (sel && sel.pg === p.k) sel.items.forEach((s) => { if (s.t !== 'x') drawStroke(c, s, W, H, sel.off, p.dark); });
+    if (sel && sel.pg === p.k) sel.items.forEach((s) => { if (s.pts) drawStroke(c, s, W, H, sel.off, p.dark); });
     if (extra) extra(c, W, H);
   }
   let rafQ = new Set(), rafId = 0;
@@ -279,7 +434,7 @@ export function mountPdf(root, o) {
   /* ---------- النصوص المكتوبة بلوحة المفاتيح ---------- */
   function renderTexts(p) {
     p.lay.innerHTML = '';
-    (data.p[p.k] || []).forEach((s) => { if (s.t === 'x') p.lay.appendChild(textEl(p, s)); });
+    (data.p[p.k] || []).forEach((s) => { if (s.t === 'x') p.lay.appendChild(textEl(p, s)); else if (!s.pts) p.lay.appendChild(objEl(p, s)); });
   }
   function textEl(p, s) {
     const stick = !!s.b;
@@ -393,6 +548,7 @@ export function mountPdf(root, o) {
   BAR.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.act === 'page') { const p = pages[cur]; if (p && p.nid) { if (!POP.hidden && POP.dataset.for === 'edit') closePop(); else editStylePop(p.nid); } return; }
+    if (b.dataset.act === 'ins') { insertMenu(); return; }
     if (b.dataset.act === 'undo') doUndo();
     else if (b.dataset.act === 'redo') doRedo();
     else if ('tool' in b.dataset) setTool(b.dataset.tool);
@@ -514,7 +670,7 @@ export function mountPdf(root, o) {
     const rx = rad / W * 10000, ry = rad / H * 10000;
     let changed = false;
     for (let j = L.length - 1; j >= 0; j--) {
-      const s = L[j]; if (s.t === 'x') continue; if (st.ehl && s.t !== 'h') continue;
+      const s = L[j]; if (!s.pts) continue; if (st.ehl && s.t !== 'h') continue;
       const hw = s.w / 1000 * 10000 / 2;
       if (st.emode === 'stroke') {
         if (hitStroke(s, q, rx + hw, ry + hw * W / H)) { L.splice(j, 1); a.op.del.push(s); changed = true; }
@@ -548,7 +704,7 @@ export function mountPdf(root, o) {
     return false;
   }
   function eraseAll() {
-    const i = pages[cur].k, L = items(i), del = L.filter((s) => s.t !== 'x' && (!st.ehl || s.t === 'h'));
+    const i = pages[cur].k, L = items(i), del = L.filter((s) => s.pts && (!st.ehl || s.t === 'h'));
     if (!del.length) return;
     const op = { pg: i, add: [], del: del };
     apply(op, false); commit(op);
@@ -561,13 +717,13 @@ export function mountPdf(root, o) {
     queue(p);
     if (poly.length < 8) return;
     const got = items(p.k).filter((s) => {
-      if (s.t === 'x') return inPoly(s.x, s.y, poly);
+      if (!s.pts) return inPoly(s.x, s.y, poly);
       let n = 0; for (let k = 0; k < s.pts.length; k += 2) if (inPoly(s.pts[k], s.pts[k + 1], poly)) n++;
       return n * 2 >= s.pts.length / 2;
     });
     if (!got.length) return;
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-    got.forEach((s) => { const P = s.t === 'x' ? [s.x, s.y, s.x + 600, s.y + 300] : s.pts; for (let k = 0; k < P.length; k += 2) { x0 = Math.min(x0, P[k]); y0 = Math.min(y0, P[k + 1]); x1 = Math.max(x1, P[k]); y1 = Math.max(y1, P[k + 1]); } });
+    got.forEach((s) => { const P = !s.pts ? [s.x, s.y, s.x + (s.w || 600), s.y + (s.h || 300)] : s.pts; for (let k = 0; k < P.length; k += 2) { x0 = Math.min(x0, P[k]); y0 = Math.min(y0, P[k + 1]); x1 = Math.max(x1, P[k]); y1 = Math.max(y1, P[k + 1]); } });
     const pad = 120;
     sel = { pg: p.k, items: got, set: new Set(got), off: [0, 0], box: [x0 - pad, y0 - pad, x1 + pad, y1 + pad] };
     const el = document.createElement('div'); el.className = 'pvselbox';
@@ -579,11 +735,11 @@ export function mountPdf(root, o) {
   }
   function inBox(q, s) { const b = s.box, dx = s.off[0] * 10000, dy = s.off[1] * 10000; return q[0] >= b[0] + dx && q[0] <= b[2] + dx && q[1] >= b[1] + dy && q[1] <= b[3] + dy; }
   function placeSelBox() { const b = sel.box, dx = sel.off[0] * 100, dy = sel.off[1] * 100; Object.assign(sel.el.style, { left: (b[0] / 100 + dx) + '%', top: (b[1] / 100 + dy) + '%', width: ((b[2] - b[0]) / 100) + '%', height: ((b[3] - b[1]) / 100) + '%' }); }
-  function moveTexts() { const p = byKey[sel.pg]; p.lay.querySelectorAll('.pvx').forEach((t) => { if (sel.set.has(t._s)) { t.style.left = (t._s.x / 100 + sel.off[0] * 100) + '%'; t.style.top = (t._s.y / 100 + sel.off[1] * 100) + '%'; } }); }
+  function moveTexts() { const p = byKey[sel.pg]; p.lay.querySelectorAll('.pvx,.pvobj').forEach((t) => { if (sel.set.has(t._s)) { t.style.left = (t._s.x / 100 + sel.off[0] * 100) + '%'; t.style.top = (t._s.y / 100 + sel.off[1] * 100) + '%'; } }); }
   function finishMove() {
     if (!sel || (!sel.off[0] && !sel.off[1])) return;
     const dx = Math.round(sel.off[0] * 10000), dy = Math.round(sel.off[1] * 10000), p = byKey[sel.pg];
-    const moved = sel.items.map((s) => s.t === 'x' ? Object.assign({}, s, { x: s.x + dx, y: s.y + dy }) : Object.assign({}, s, { pts: s.pts.map((v, k) => v + (k % 2 ? dy : dx)) }));
+    const moved = sel.items.map((s) => !s.pts ? Object.assign({}, s, { x: s.x + dx, y: s.y + dy }) : Object.assign({}, s, { pts: s.pts.map((v, k) => v + (k % 2 ? dy : dx)) }));
     const op = { pg: sel.pg, add: moved, del: sel.items.slice() };
     sel.items = moved; sel.set = new Set(moved); sel.box = [sel.box[0] + dx, sel.box[1] + dy, sel.box[2] + dx, sel.box[3] + dy]; sel.off = [0, 0];
     const L = items(op.pg); op.del.forEach((s) => { const k = L.indexOf(s); if (k >= 0) L.splice(k, 1); }); moved.forEach((s) => L.push(s));

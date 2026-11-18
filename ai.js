@@ -1,9 +1,9 @@
 // مساعد Gemini داخل الموقع (Firebase AI Logic · Gemini Developer API).
 // يعمل في نسخة Firebase منفصلة (12.x) حتى لا يمسّ باقي الموقع: إن فشل، يبقى الموقع سليماً.
-import * as CFG from './firebase-config.js?v=66';
+import * as CFG from './firebase-config.js?v=68';
 
 const V = '12.12.1';
-const MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash'];
+const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-3-flash-preview'];
 const DAILY = 30;
 const SYS = 'أنت «مساعد Gues Chemi»، أستاذ مساعد لطلبة السنة الأولى صيدلة في الجزائر. ' +
   'القاعدة الأهم: الدرس هو المرجع الأول. مع كل سؤال يصلك «نص الدرس» و«مقتطفات من الدرس»: ابنِ جوابك عليها أولاً، واستعمل نفس تعريفاتها وأرقامها ومصطلحاتها حتى لو كانت تختلف عمّا تعرفه، لأن الطالب يُمتحن على درسه. ' +
@@ -12,7 +12,7 @@ const SYS = 'أنت «مساعد Gues Chemi»، أستاذ مساعد لطلبة
   'في أسئلة الكيسيام: قد يكون أكثر من اقتراح صحيح. اعتمد على «الجواب الرسمي» و«التصحيح» المرفقين إن وُجدا، واشرح لكل اقتراح (A، B، C…) لماذا هو صحيح أو خاطئ مع الجملة من الدرس التي تثبت ذلك. ' +
   'إن قال الطالب إنه يريد المحاولة وحده، أعطه تلميحاً دون كشف الجواب. لا تجب عن مواضيع لا علاقة لها بالدراسة.';
 
-let modP = null, chat = null, modelName = '', lastCtxKey = '';
+let modP = null, chat = null, modelName = '', lastCtxKey = '', hist = [], mIdx = 0;
 function load() {
   if (!modP) modP = Promise.all([
     import('https://www.gstatic.com/firebasejs/' + V + '/firebase-app.js'),
@@ -27,17 +27,34 @@ function load() {
   }).catch((e) => { modP = null; throw e; });
   return modP;
 }
-async function newChat(history) {
+async function chatWith(idx) {
   const { AI, ai } = await load();
-  let err = null;
-  for (const m of MODELS) {
+  const model = AI.getGenerativeModel(ai, { model: MODELS[idx], systemInstruction: SYS, generationConfig: { maxOutputTokens: 1500, temperature: 0.4 } });
+  modelName = MODELS[idx];
+  return model.startChat({ history: hist.slice() });
+}
+// نجرّب النماذج بالترتيب: إن رفض نموذج (حصة صفر / غير متاح) ننتقل إلى التالي ونتذكّره
+async function streamAsk(prompt, onText) {
+  let last = null;
+  for (let k = 0; k < MODELS.length; k++) {
+    const idx = (mIdx + k) % MODELS.length;
     try {
-      const model = AI.getGenerativeModel(ai, { model: m, systemInstruction: SYS, generationConfig: { maxOutputTokens: 1200, temperature: 0.4 } });
-      const c = model.startChat({ history: history || [] });
-      modelName = m; return c;
-    } catch (e) { err = e; }
+      const c = await chatWith(idx);
+      const r = await c.sendMessageStream(prompt);
+      let acc = '';
+      for await (const ch of r.stream) { try { acc += ch.text(); } catch (e) {} onText(acc); }
+      if (!acc) { const fin = await r.response; acc = fin.text(); onText(acc); }
+      mIdx = idx;
+      hist.push({ role: 'user', parts: [{ text: prompt }] }, { role: 'model', parts: [{ text: acc }] });
+      if (hist.length > 16) hist = hist.slice(-16);
+      return acc;
+    } catch (e) {
+      last = e; const m = String(e && (e.message || e));
+      try { console.warn('[GuesAI]', MODELS[idx], m); } catch (x) {}
+      if (!/quota|429|exhaust|rate|404|not found|not supported|unsupported|invalid.*model|model/i.test(m)) break;
+    }
   }
-  throw err;
+  throw last;
 }
 
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -91,7 +108,7 @@ export function mountAI(o) {
     if (ask) send(ask); else setTimeout(() => TA.focus(), 50);
   }
   function close() { P.hidden = true; root.classList.remove('on'); }
-  function reset() { chat = null; lastCtxKey = ''; M.querySelectorAll('.aim').forEach((x) => x.remove()); M.querySelector('.aiwel').hidden = false; }
+  function reset() { hist = []; lastCtxKey = ''; M.querySelectorAll('.aim').forEach((x) => x.remove()); M.querySelector('.aiwel').hidden = false; }
   function bubble(cls, html) { const d = document.createElement('div'); d.className = 'aim ' + cls; d.innerHTML = html; M.appendChild(d); M.querySelector('.aiwel').hidden = true; M.scrollTop = M.scrollHeight; return d; }
 
   async function send(text) {
@@ -112,19 +129,15 @@ export function mountAI(o) {
     quote = ''; Q.hidden = true;
     const out = bubble('bot', '<p class="aiwait">… يكتب</p>');
     try {
-      if (!chat) chat = await newChat();
-      let acc = '';
-      const r = await chat.sendMessageStream(prompt);
-      for await (const ch of r.stream) { try { acc += ch.text(); } catch (e) {} out.innerHTML = md(acc); M.scrollTop = M.scrollHeight; }
-      if (!acc) { const fin = await r.response; acc = fin.text(); out.innerHTML = md(acc); }
+      await streamAsk(prompt, (acc) => { out.innerHTML = md(acc); M.scrollTop = M.scrollHeight; });
       use(); refreshHead();
     } catch (e) {
       const m = String(e && (e.message || e));
-      chat = null; lastCtxKey = '';
+      lastCtxKey = '';
       out.className = 'aim bot err';
       out.innerHTML = '<p>' + (/quota|429|exhaust|rate/i.test(m) ? 'المساعد مشغول الآن (انتهت الحصة المؤقتة). حاول بعد قليل.' :
         /api-not-enabled|not been used|disabled|PERMISSION|403|app-check/i.test(m) ? 'المساعد غير مفعّل بعد في إعدادات الموقع. أخبر المشرف.' :
-        'تعذّر الاتصال بـ Gemini. تحقق من الإنترنت ثم أعد المحاولة.') + '</p>';
+        'تعذّر الاتصال بـ Gemini. تحقق من الإنترنت ثم أعد المحاولة.') + '</p><p class="aierr" dir="ltr">' + esc(m.slice(0, 220)) + '</p>';
       try { console.warn('[GuesAI]', m); } catch (x) {}
     }
     busy = false;

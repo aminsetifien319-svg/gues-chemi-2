@@ -1362,3 +1362,4 @@ body.pdfmode #gcai{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .aiform button{flex:none;width:42px;height:42px;border:0;border-radius:50%;background:#4f46e5;color:#fff;font-size:17px;cursor:pointer}
 .ainote{margin:0;padding:0 12px 10px;font-size:11px;color:var(--mut);display:flex;justify-content:space-between;gap:8px}
 @media print{#gcai{display:none!important}}
+.btn.aiq{border-color:#7c3aed;color:#7c3aed}

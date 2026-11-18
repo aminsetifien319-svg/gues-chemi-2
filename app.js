@@ -3,10 +3,10 @@ import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing,
   YEAR, YEAR_EXPLICIT, YEAR_AR, YEAR_EN, hasYear, switchYear, loadNotes, saveNotes
-} from './firebase.js?v=65';
-import { mountPdf } from './pdfv.js?v=65';
-import { fmt, typeset } from './rich.js?v=65';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=65';
+} from './firebase.js?v=66';
+import { mountPdf } from './pdfv.js?v=66';
+import { fmt, typeset } from './rich.js?v=66';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=66';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -217,7 +217,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 65;
+const APP_V = 66;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -785,21 +785,44 @@ function chapter(ch) {
 /* =================================================================
    صفحة الدرس (نص + صور توضيحية، أو الصفحة الأصلية)
    ================================================================= */
+/* مساعد Gemini: السياق من نص الدرس أولاً */
+const strip = (h) => { const d = document.createElement('div'); d.innerHTML = String(h || '').replace(/<(br|\/p|\/li|\/h\d|\/div|\/tr)>/gi, '\n$&'); return d.textContent.replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim(); };
+function pageTxt(T, n) { const P = T && T.pages && T.pages[n]; return P ? ((P.en || '') + (P.ar ? ' · ' + P.ar : '') + '\n' + strip(P.html)) : ''; }
+function lessonSearch(T, query, skip) {   // أقرب صفحات الدرس إلى السؤال (كلمات مشتركة)
+  if (!T || !T.pages) return '';
+  const words = (query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []).filter((w) => !/^(ما|هي|هو|التي|الذي|هذا|هذه|لماذا|كيف|what|the|and|why|how)$/.test(w));
+  if (!words.length) return '';
+  const sc = Object.keys(T.pages).filter((n) => String(n) !== String(skip)).map((n) => { const t = pageTxt(T, n).toLowerCase(); let k = 0; words.forEach((w) => { if (t.indexOf(w) >= 0) k++; }); return [k, n, t]; }).filter((x) => x[0]).sort((a, b) => b[0] - a[0]).slice(0, 2);
+  return sc.map((x) => pageTxt(T, x[1])).join('\n---\n').slice(0, 5000);
+}
+async function aiCtx(question) {
+  const r = parse();
+  if (/^exam/.test(r.v) && prog && prog.exam) return { block: 'الامتحان التجريبي جارٍ: المساعد متوقف حتى تنهي الامتحان.' };
+  if (window.__gcPdfCtx) { try { const c = window.__gcPdfCtx(); if (c) { const ch = c.ch; let T = null; try { T = ch ? await chText(ch) : null; } catch (e) {} if (question && T) c.more = lessonSearch(T, question); delete c.ch; return c; } } catch (e) {} }
+  const ch = r.ch;
+  if (!ch) return { label: 'Gues Chemi', text: '', key: 'home', kind: 'home' };
+  let T = null; try { T = await chText(ch); } catch (e) {}
+  let lab = ch.en + ' · ' + ch.ar, key = 'c' + ch.id, text = '', kind = 'chapter', skip = null;
+  if (r.v === 'page') { const p = FLOW[ch.id][r.i]; lab += ' · ' + (p.secAr || '') + ' · ' + (p.t || ''); key += 'p' + p.n; text = pageTxt(T, p.n); skip = p.n; kind = 'page'; }
+  else if (r.v === 'quiz') {
+    const q = r.set.q[r.i], Q = T && T.q && T.q['c' + ch.id + r.set.key[0] + q.n];
+    lab += ' · كيسيام ' + (r.set.ar || '') + ' · السؤال ' + (r.i + 1); key += 'q' + r.set.key + r.i; kind = 'qcm'; skip = q.p;
+    if (Q) text = 'سؤال كيسيام (قد يكون أكثر من جواب صحيح):\n' + (Q.en || '') + (Q.ar ? '\n' + Q.ar : '') + '\n' + (Q.opts || []).map((o) => o.L + ') ' + (o.en || '') + (o.ar ? ' / ' + o.ar : '')).join('\n') +
+      (q.ans ? '\nالجواب الرسمي: ' + q.ans.split('').join(', ') : '\nلا يوجد تصحيح رسمي لهذا السؤال.') + (Q.s ? '\nالتصحيح المرفق في الموقع:\n' + strip(Q.s) : '');
+    if (q.p) text += '\n\nصفحة الدرس المرتبطة بالسؤال:\n' + pageTxt(T, q.p);
+  }
+  else if (T && T.pages) { text = 'محتوى الفصل (عناوين): ' + Object.keys(T.pages).map((n) => T.pages[n].en + (T.pages[n].ar ? ' / ' + T.pages[n].ar : '')).join(' · '); }
+  const c = { label: lab, text: text.slice(0, 9000), key: key, kind: kind };
+  if (question && T) c.more = lessonSearch(T, question, skip);
+  return c;
+}
 /* مساعد Gemini: يُحمَّل عند أول ضغطة فقط */
 let aiOn = false;
 function startAI() {
   if (aiOn) return; aiOn = true;
-  import('./ai.js?v=65').then((m) => m.mountAI({
+  import('./ai.js?v=66').then((m) => m.mountAI({
     email: () => (me && me.email) || '',
-    getCtx: () => {
-      if (window.__gcPdfCtx) { try { const c = window.__gcPdfCtx(); if (c) return c; } catch (e) {} }
-      const r = parse(); const ch = r.ch;
-      if (!ch) return { label: 'Gues Chemi', text: '', key: 'home' };
-      let lab = ch.en + ' · ' + ch.ar, key = 'c' + ch.id;
-      if (r.v === 'page') { const p = FLOW[ch.id][r.i]; lab += ' · ' + (p.secAr || '') + ' · ' + (p.t || ''); key += 'p' + p.n; }
-      if (r.v === 'quiz') { lab += ' · كيسيام ' + (r.set.ar || '') + ' · السؤال ' + (r.i + 1); key += 'q' + r.i; }
-      return { label: lab, text: '', key: key };
-    }
+    getCtx: aiCtx
   })).catch(() => { aiOn = false; });
 }
 /* الدرس PDF: الصفحات صور محمية + أدوات كتابة، والملاحظات تُحفظ في حساب الطالب */
@@ -895,6 +918,7 @@ function qscreen(ctx) {
   let action = '';
   if (live) action = '<button type="button" class="btn ghost2 flag' + (flagged ? ' on' : '') + '" data-q="flag">' + (flagged ? '⚑ مُعلَّم للمراجعة' : '⚐ علّم للمراجعة') + '</button>';
   else if (!r) action = '<button type="button" class="btn pri check" data-q="check"' + (sel.length ? '' : ' disabled') + '>تحقّق من الإجابة</button>';
+  if (!live && it.ch.text) action += '<button type="button" class="btn ghost2 aiq" data-act="aiq">✨ اشرح مع Gemini</button>';
   const prevB = i > 0 && !(ctx.noPrev) ? '<a class="btn" data-nav="prev" href="' + ctx.href(i - 1) + '">→ السابق</a>' : '<span></span>';
   const nextB = ctx.nextBtn ? ctx.nextBtn(i) : (i < keys.length - 1 ? '<a class="btn' + (r || live ? ' pri' : '') + '" data-nav="next" href="' + ctx.href(i + 1) + '">التالي ←</a>' : (ctx.end || '<span></span>'));
   const mid = mode === 'practice' && r ? '<button type="button" class="btn ghost2" data-q="retry">أعد هذا السؤال</button>' : '<span></span>';
@@ -1474,6 +1498,7 @@ document.addEventListener('click', async (e) => {
     else if (act === 'logout') { if (unwatch) { unwatch(); unwatch = null; } pendingM = null; if (pushTimer) await push(); clearInterval(tick); quizSel = {}; revRes = {}; revLists = {}; IDX = null; Object.keys(TXT).forEach((k) => delete TXT[k]); Object.keys(FCD).forEach((k) => delete FCD[k]); Object.keys(FCARDS).forEach((k) => delete FCARDS[k]); FS = null; wmUrl = ''; ready = false; cloud = 'off'; await signOutUser(); }
     else if (act === 'request') { a.disabled = true; try { await sendRequest(me); gPending(me); } catch (err) { gError(friendly(err)); } }
     else if (act === 'recheck') onUser(me);
+    else if (act === 'aiq') { if (window.__gcAsk) window.__gcAsk(null, 'اشرح لي هذا السؤال: ما المطلوب، ولماذا كل اقتراح صحيح أو خاطئ، اعتماداً على الدرس.'); }
     else if (act === 'update') { a.disabled = true; try { if (pushTimer) await push(); } catch (e2) {} location.reload(); }
     else if (act === 'install' && installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch (e2) {} installEvt = null; renderUser(); }
     return;

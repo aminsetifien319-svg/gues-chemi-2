@@ -699,10 +699,10 @@ export function mountPdf(root, o) {
 
   window.__gcPdfCtx = () => {
     const p = pages[cur]; if (!p) return null;
-    if (p.li == null) return { label: ch.ar + ' · صفحة ملاحظات', text: '', key: 'pdf' + ch.id + p.k };
+    if (p.li == null) return { label: ch.ar + ' · صفحة ملاحظات', text: '', key: 'pdf' + ch.id + p.k, kind: 'pdf', ch: ch };
     loadTX();
     const L = TX && TX[p.li] ? TX[p.li].map((l) => l[4]).join('\n') : '';
-    return { label: ch.en + ' · ' + ch.ar + ' · صفحة ' + (p.li + 1) + ' / ' + N, text: L, key: 'pdf' + ch.id + '_' + p.li + (L ? 't' : '') };
+    return { label: ch.en + ' · ' + ch.ar + ' · صفحة ' + (p.li + 1) + ' / ' + N, text: L, key: 'pdf' + ch.id + '_' + p.li + (L ? 't' : ''), kind: 'pdf', ch: ch };
   };
   loadTX();
   return function destroy() {

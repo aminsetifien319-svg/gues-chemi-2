@@ -1,15 +1,16 @@
 // مساعد Gemini داخل الموقع (Firebase AI Logic · Gemini Developer API).
 // يعمل في نسخة Firebase منفصلة (12.x) حتى لا يمسّ باقي الموقع: إن فشل، يبقى الموقع سليماً.
-import * as CFG from './firebase-config.js?v=65';
+import * as CFG from './firebase-config.js?v=66';
 
 const V = '12.12.1';
 const MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash'];
 const DAILY = 30;
 const SYS = 'أنت «مساعد Gues Chemi»، أستاذ مساعد لطلبة السنة الأولى صيدلة في الجزائر. ' +
-  'أجب بالعربية الواضحة، واكتب المصطلحات العلمية بالفرنسية أو الإنجليزية كما في الدروس (مثلاً: الكابسيد capside). ' +
-  'اعتمد أولاً على «نص الدرس» المرفق مع السؤال إن وُجد، وإن كان الجواب غير موجود فيه قل ذلك ثم أجب من معرفتك بحذر. ' +
-  'كن مختصراً ومنظماً (نقاط قصيرة)، واشرح الفكرة ببساطة مع مثال إن أمكن. لا تخترع أرقاماً أو مراجع. ' +
-  'إن سُئلت عن سؤال كيسيام، اشرح لماذا كل اقتراح صحيح أو خاطئ. لا تجب عن مواضيع لا علاقة لها بالدراسة.';
+  'القاعدة الأهم: الدرس هو المرجع الأول. مع كل سؤال يصلك «نص الدرس» و«مقتطفات من الدرس»: ابنِ جوابك عليها أولاً، واستعمل نفس تعريفاتها وأرقامها ومصطلحاتها حتى لو كانت تختلف عمّا تعرفه، لأن الطالب يُمتحن على درسه. ' +
+  'إن لم يكن الجواب موجوداً في نص الدرس، فقل صراحة: «هذا غير مذكور في الدرس، ومن معلوماتي العامة:» ثم أجب بحذر. لا تخلط بين ما في الدرس وما من معرفتك دون تمييز. ' +
+  'أجب بالعربية الواضحة، واكتب المصطلحات العلمية بالفرنسية أو الإنجليزية كما في الدروس. كن مختصراً ومنظماً بنقاط قصيرة. لا تخترع أرقاماً أو مراجع. ' +
+  'في أسئلة الكيسيام: قد يكون أكثر من اقتراح صحيح. اعتمد على «الجواب الرسمي» و«التصحيح» المرفقين إن وُجدا، واشرح لكل اقتراح (A، B، C…) لماذا هو صحيح أو خاطئ مع الجملة من الدرس التي تثبت ذلك. ' +
+  'إن قال الطالب إنه يريد المحاولة وحده، أعطه تلميحاً دون كشف الجواب. لا تجب عن مواضيع لا علاقة لها بالدراسة.';
 
 let modP = null, chat = null, modelName = '', lastCtxKey = '';
 function load() {
@@ -76,15 +77,18 @@ export function mountAI(o) {
   const P = $('.aipanel'), M = $('.aimsgs'), TA = $('textarea'), Q = $('.aiquote');
   let quote = '', busy = false;
 
-  function ctx() { let c = null; try { c = o.getCtx(); } catch (e) {} return c || { label: '', text: '', key: '' }; }
-  function refreshHead() {
-    const c = ctx(); $('.aictx').textContent = c.label || 'Gues Chemi';
+  async function ctx(q) { let c = null; try { c = await o.getCtx(q); } catch (e) {} return c || { label: '', text: '', key: '' }; }
+  const SUG = { qcm: [['اشرح لي هذا السؤال وكل اقتراح', 'اشرح لي هذا السؤال: لماذا كل اقتراح صحيح أو خاطئ، اعتماداً على الدرس'], ['أعطني تلميحاً فقط', 'أريد أن أحاول وحدي: أعطني تلميحاً من الدرس دون كشف الجواب'], ['ذكّرني بالدرس المتعلق', 'لخّص لي جزء الدرس المتعلق بهذا السؤال']],
+    def: [['اشرح هذه الصفحة', 'اشرح لي هذه الصفحة ببساطة'], ['لخّص الصفحة', 'لخّص لي هذه الصفحة في نقاط قصيرة'], ['اختبرني', 'اطرح عليّ 3 أسئلة كيسيام من هذه الصفحة مع الحل']] };
+  async function refreshHead() {
+    const c = await ctx(); $('.aictx').textContent = c.block || c.label || 'Gues Chemi';
+    $('.aisugg').innerHTML = (SUG[c.kind] || SUG.def).map((x) => '<button type="button" data-q="' + esc(x[1]) + '">' + esc(x[0]) + '</button>').join('');
     $('.aileft').textContent = 'متبقٍّ اليوم: ' + Math.max(0, DAILY - used()) + '/' + DAILY;
   }
-  function open(q) {
+  function open(q, ask) {
     P.hidden = false; root.classList.add('on'); refreshHead();
     if (q) { quote = q.slice(0, 600); Q.hidden = false; Q.querySelector('span').textContent = '«' + quote + '»'; }
-    setTimeout(() => TA.focus(), 50);
+    if (ask) send(ask); else setTimeout(() => TA.focus(), 50);
   }
   function close() { P.hidden = true; root.classList.remove('on'); }
   function reset() { chat = null; lastCtxKey = ''; M.querySelectorAll('.aim').forEach((x) => x.remove()); M.querySelector('.aiwel').hidden = false; }
@@ -94,13 +98,15 @@ export function mountAI(o) {
     text = (text || '').trim(); if (!text || busy) return;
     if (used() >= DAILY) { bubble('bot err', '<p>انتهت أسئلتك لهذا اليوم (' + DAILY + '). عُد غداً إن شاء الله.</p>'); return; }
     busy = true; TA.value = ''; TA.style.height = '';
-    const c = ctx();
+    const c = await ctx(text);
+    if (c.block) { bubble('bot err', '<p>' + esc(c.block) + '</p>'); busy = false; return; }
     bubble('me', (quote ? '<blockquote>' + esc(quote) + '</blockquote>' : '') + '<p>' + esc(text) + '</p>');
     let prompt = '';
     if (c.key !== lastCtxKey && (c.text || c.label)) {
-      prompt += 'السياق: ' + (c.label || '') + '\n' + (c.text ? 'نص الدرس (الصفحة التي يقرؤها الطالب):\n"""\n' + c.text.slice(0, 6000) + '\n"""\n\n' : '\n');
+      prompt += 'السياق: ' + (c.label || '') + '\n' + (c.text ? 'نص الدرس (ما يقرؤه الطالب الآن):\n"""\n' + c.text.slice(0, 9000) + '\n"""\n\n' : '\n');
       lastCtxKey = c.key;
     }
+    if (c.more) prompt += 'مقتطفات أخرى من الدرس قد تفيد في الجواب:\n"""\n' + c.more + '\n"""\n\n';
     if (quote) prompt += 'الجزء الذي حدّده الطالب من الدرس:\n"' + quote + '"\n\n';
     prompt += 'سؤال الطالب: ' + text;
     quote = ''; Q.hidden = true;
@@ -135,6 +141,6 @@ export function mountAI(o) {
   $('.aiform').addEventListener('submit', (e) => { e.preventDefault(); send(TA.value); });
   TA.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(TA.value); } });
   TA.addEventListener('input', () => { TA.style.height = 'auto'; TA.style.height = Math.min(120, TA.scrollHeight) + 'px'; });
-  window.__gcAsk = (q) => open(q);
+  window.__gcAsk = (q, ask) => open(q, ask);
   return { open: open, close: close };
 }

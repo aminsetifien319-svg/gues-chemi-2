@@ -3,10 +3,10 @@ import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing,
   YEAR, YEAR_EXPLICIT, YEAR_AR, YEAR_EN, hasYear, switchYear, loadNotes, saveNotes, loadMedia, saveMedia
-} from './firebase.js?v=71';
-import { mountPdf } from './pdfv.js?v=71';
-import { fmt, typeset } from './rich.js?v=71';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=71';
+} from './firebase.js?v=72';
+import { mountPdf } from './pdfv.js?v=72';
+import { fmt, typeset } from './rich.js?v=72';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=72';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -217,7 +217,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 71;
+const APP_V = 72;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -820,7 +820,7 @@ async function aiCtx(question) {
 let aiOn = false;
 function startAI() {
   if (aiOn) return; aiOn = true;
-  import('./ai.js?v=71').then((m) => m.mountAI({
+  import('./ai.js?v=72').then((m) => m.mountAI({
     email: () => (me && me.email) || '',
     getCtx: aiCtx
   })).catch(() => { aiOn = false; });

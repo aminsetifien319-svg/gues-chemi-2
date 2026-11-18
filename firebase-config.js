@@ -9,6 +9,6 @@ export const firebaseConfig = {
 
 // App Check: يجعل Firebase يرفض أي طلب لا يأتي من موقعك (حتى لو نُسخ المفتاح أعلاه).
 // الصق هنا «مفتاح الموقع» (site key) من reCAPTCHA v3، واتركه فارغاً لتعطيله.
-export const appCheckSiteKey = "6Lf4GycuAAAAAP6ijvq9JwYAwAvUiWb2UuZ1gXCd";
+export const appCheckSiteKey = "6LeJACcuAAAAACzgSAq3zr0BPb9BFNytw5Wyh7rS";
 // true = Fraud Defense (reCAPTCHA Enterprise) في App Check، false = reCAPTCHA v3 الكلاسيكي
 export const appCheckEnterprise = true;

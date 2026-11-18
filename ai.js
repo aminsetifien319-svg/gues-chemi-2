@@ -1,6 +1,6 @@
 // مساعد Gemini داخل الموقع (Firebase AI Logic · Gemini Developer API).
 // يعمل في نسخة Firebase منفصلة (12.x) حتى لا يمسّ باقي الموقع: إن فشل، يبقى الموقع سليماً.
-import * as CFG from './firebase-config.js?v=79';
+import * as CFG from './firebase-config.js?v=80';
 
 const V = '12.12.1';
 const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-3-flash-preview'];

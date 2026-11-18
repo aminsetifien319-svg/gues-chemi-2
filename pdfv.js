@@ -467,7 +467,7 @@ export function mountPdf(root, o) {
   function blit(p, extra) {
     const c = p.ctx, W = p.cv.width, H = p.cv.height; if (!W) return;
     c.clearRect(0, 0, W, H); c.drawImage(p.base, 0, 0);
-    if (sel && sel.pg === p.k) sel.items.forEach((s) => { if (s.pts) drawStroke(c, s, W, H, sel.off, p.dark); });
+    if (sel && sel.pg === p.k) sel.items.forEach((s) => { if (s.pts) drawStroke(c, sel.scale && sel.scale !== 1 ? scaledItem(s, sel.scale, sel.box[0], sel.box[1]) : s, W, H, sel.off, p.dark); });
     if (extra) extra(c, W, H);
   }
   let rafQ = new Set(), rafId = 0;
@@ -555,7 +555,8 @@ export function mountPdf(root, o) {
     let h = '<div class="pvph"><b>' + ({ pen: 'القلم', hl: 'قلم التظليل', er: 'الممحاة', text: 'الكتابة بلوحة المفاتيح' })[t] + '</b><button type="button" class="pvx0" data-pop="close" aria-label="إغلاق">' + I.x + '</button></div>';
     if (t === 'pen') {
       h += '<div class="pvkinds">' + KINDS.map((k) => '<button type="button" class="pvkind k-' + k[0] + (st.kind === k[0] ? ' on' : '') + '" data-kind="' + k[0] + '"><i style="--kc:' + st.pc + '"></i><span>' + k[1] + '</span></button>').join('') + '</div>' +
-        rng('pw', st.pw, 1, 30) + '<label class="pvtog"><span>تقويم الخطوط</span><input type="checkbox" data-straight' + (st.straight ? ' checked' : '') + '><i></i></label>' + sw(PEN_COLS, st.pc, 'pc');
+        rng('pw', st.pw, 1, 30) + '<label class="pvtog"><span>تقويم الخطوط</span><input type="checkbox" data-straight' + (st.straight ? ' checked' : '') + '><i></i></label>' + sw(PEN_COLS, st.pc, 'pc') +
+        '<p class="pvhint">لتحريك ما كتبته أو تكبيره أو تغيير لونه: اختر ✋ ثم اضغط على الخط، أو أحِطه بأداة التحديد ◌.</p>';
     } else if (t === 'hl') {
       h += rng('hw', st.hw, 8, 50) + sw(HL_COLS, st.hc, 'hc');
     } else if (t === 'er') {
@@ -804,19 +805,118 @@ export function mountPdf(root, o) {
       return n * 2 >= s.pts.length / 2;
     });
     if (!got.length) return;
-    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-    got.forEach((s) => { const P = !s.pts ? [s.x, s.y, s.x + (s.w || 600), s.y + (s.h || 300)] : s.pts; for (let k = 0; k < P.length; k += 2) { x0 = Math.min(x0, P[k]); y0 = Math.min(y0, P[k + 1]); x1 = Math.max(x1, P[k]); y1 = Math.max(y1, P[k + 1]); } });
-    const pad = 120;
-    sel = { pg: p.k, items: got, set: new Set(got), off: [0, 0], box: [x0 - pad, y0 - pad, x1 + pad, y1 + pad] };
+    selectItems(p, got);
+  }
+  // مستطيل حول العناصر بحسب حجمها الحقيقي على الصفحة
+  function itemBox(p, s) {
+    if (s.pts) { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (let k = 0; k < s.pts.length; k += 2) { x0 = Math.min(x0, s.pts[k]); y0 = Math.min(y0, s.pts[k + 1]); x1 = Math.max(x1, s.pts[k]); y1 = Math.max(y1, s.pts[k + 1]); } return [x0, y0, x1, y1]; }
+    const el = [...p.lay.children].find((x) => x._s === s), r = p.fig.getBoundingClientRect();
+    if (el && r.width) { const b = el.getBoundingClientRect(); return [s.x, s.y, s.x + b.width / r.width * 10000, s.y + b.height / r.height * 10000]; }
+    return [s.x, s.y, s.x + (s.w || 600), s.y + (s.h || 300)];
+  }
+  function selBounds(p, L) { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; L.forEach((s) => { const b = itemBox(p, s); x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); }); const pad = 120; return [x0 - pad, y0 - pad, x1 + pad, y1 + pad]; }
+  function selectItems(p, got) {
+    sel = { pg: p.k, items: got, set: new Set(got), off: [0, 0], scale: 1, box: selBounds(p, got) };
     const el = document.createElement('div'); el.className = 'pvselbox';
-    el.innerHTML = '<div class="pvselbar"><button type="button" data-sel="copy"><span>نسخ</span></button><button type="button" data-sel="del">' + I.trash + '<span>حذف</span></button></div>';
+    el.innerHTML = '<div class="pvselbar"><button type="button" data-sel="smaller" title="تصغير">−</button><button type="button" data-sel="bigger" title="تكبير">+</button><button type="button" data-sel="color" title="تغيير اللون"><i class="pvselc"></i></button><button type="button" data-sel="copy"><span>نسخ</span></button><button type="button" data-sel="del">' + I.trash + '</button></div>' +
+      '<div class="pvselcols" hidden>' + PEN_COLS.map((c) => '<button type="button" data-selc="' + c + '" style="background:' + c + '"></button>').join('') + '</div>' +
+      '<span class="pvselrz" title="اسحب للتكبير والتصغير"></span>';
     p.lay.appendChild(el); sel.el = el; placeSelBox();
-    el.querySelector('[data-sel="copy"]').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); copyStrokes(); });
-    el.querySelector('[data-sel="del"]').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); const op = { pg: p.k, add: [], del: sel.items.slice() }; sel = null; el.remove(); apply(op, false); commit(op); });
+    const stop = (e) => { e.stopPropagation(); e.preventDefault(); };
+    el.querySelector('.pvselbar').addEventListener('pointerdown', (e) => {
+      stop(e); const b = e.target.closest('[data-sel]'); if (!b || !sel) return;
+      const k = b.dataset.sel;
+      if (k === 'copy') copyStrokes();
+      else if (k === 'del') { const op = { pg: p.k, add: [], del: sel.items.slice() }; sel = null; el.remove(); apply(op, false); commit(op); }
+      else if (k === 'smaller') scaleSel(0.88);
+      else if (k === 'bigger') scaleSel(1.12);
+      else if (k === 'color') { const c = el.querySelector('.pvselcols'); c.hidden = !c.hidden; }
+    });
+    el.querySelector('.pvselcols').addEventListener('pointerdown', (e) => { stop(e); const b = e.target.closest('[data-selc]'); if (b) recolorSel(b.dataset.selc); });
+    // سحب المستطيل لتحريك ما بداخله، وإصبعان أو الزاوية للتكبير
+    const ptrs = new Map(); let g = null;
+    el.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.pvselbar,.pvselcols') || !sel) return;
+      stop(e); try { el.setPointerCapture(e.pointerId); } catch (x) {}
+      ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+      const r = p.cv.getBoundingClientRect();
+      if (e.target.classList.contains('pvselrz')) { g = { kind: 'rz', r: r, w0: (sel.box[2] - sel.box[0]) / 10000 * r.width, ax: r.left + sel.box[0] / 10000 * r.width }; return; }
+      if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; g = { kind: 'pinch', r: r, d0: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1 }; sel.off = [0, 0]; return; }
+      g = { kind: 'mv', r: r, x0: e.clientX, y0: e.clientY };
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!g || !ptrs.has(e.pointerId) || !sel) return; ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+      if (g.kind === 'mv') { sel.off = [(e.clientX - g.x0) / g.r.width, (e.clientY - g.y0) / g.r.height]; placeSelBox(); moveTexts(); queue(p); }
+      else if (g.kind === 'rz') { sel.scale = Math.max(0.2, Math.min(5, (e.clientX - g.ax) / g.w0)); placeSelBox(); queue(p); }
+      else if (g.kind === 'pinch' && ptrs.size === 2) { const [a, b] = [...ptrs.values()]; sel.scale = Math.max(0.2, Math.min(5, Math.hypot(a[0] - b[0], a[1] - b[1]) / g.d0)); placeSelBox(); queue(p); }
+    });
+    const up = (e) => {
+      ptrs.delete(e.pointerId); if (!g || !sel) { g = null; return; }
+      if (g.kind === 'mv' && !ptrs.size) { g = null; finishMove(); }
+      else if ((g.kind === 'rz' && !ptrs.size) || (g.kind === 'pinch' && ptrs.size < 2)) { const f = sel.scale; sel.scale = 1; g = null; if (Math.abs(f - 1) > 0.01) scaleSel(f); else { placeSelBox(); queue(p); } }
+    };
+    el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
     renderBase(p); blit(p); renderTexts(p); p.lay.appendChild(el);
   }
+  // تكبير/تصغير ما حُدّد انطلاقاً من زاويته العليا
+  function scaledItem(s, f, ax, ay) {
+    const X = (v) => Math.round(ax + (v - ax) * f), Y = (v) => Math.round(ay + (v - ay) * f);
+    if (s.pts) return Object.assign({}, s, { pts: s.pts.map((v, k) => k % 2 ? Y(v) : X(v)), w: +Math.max(0.3, Math.min(60, s.w * f)).toFixed(2) });
+    const n = Object.assign({}, s, { x: X(s.x), y: Y(s.y) });
+    if (s.t === 'x') n.z = +Math.max(4, Math.min(80, s.z * f)).toFixed(1);
+    if (s.w != null) n.w = Math.round(Math.max(400, Math.min(10000, s.w * f)));
+    if (s.h != null) n.h = Math.round(s.h * f);
+    return n;
+  }
+  function scaleSel(f) {
+    if (!sel) return; finishMove();
+    const p = byKey[sel.pg], ax = sel.box[0], ay = sel.box[1];
+    const nw = sel.items.map((s) => scaledItem(s, f, ax, ay));
+    const op = { pg: sel.pg, add: nw, del: sel.items.slice() };
+    const L = items(op.pg); op.del.forEach((s) => { const k = L.indexOf(s); if (k >= 0) L.splice(k, 1); }); nw.forEach((s) => L.push(s));
+    sel.items = nw; sel.set = new Set(nw);
+    commit(op); renderBase(p); blit(p); const el = sel.el; renderTexts(p); p.lay.appendChild(el);
+    sel.box = selBounds(p, nw); placeSelBox();
+  }
+  function recolorSel(c) {
+    if (!sel) return; finishMove();
+    const p = byKey[sel.pg];
+    const nw = sel.items.map((s) => (s.c && s.t !== 'h' ? Object.assign({}, s, { c: c }) : s));
+    const op = { pg: sel.pg, add: nw.filter((s, i) => s !== sel.items[i]), del: sel.items.filter((s, i) => s !== nw[i]) };
+    if (!op.add.length) return;
+    const L = items(op.pg); op.del.forEach((s) => { const k = L.indexOf(s); if (k >= 0) L.splice(k, 1); }); op.add.forEach((s) => L.push(s));
+    sel.items = nw; sel.set = new Set(nw);
+    commit(op); renderBase(p); blit(p); const el = sel.el; renderTexts(p); p.lay.appendChild(el);
+  }
+  // في وضع اليد: الضغط على خط أو نص يحدّده مباشرة
+  function hitItem(p, q, e) {
+    const L = items(p.k);
+    for (let i = L.length - 1; i >= 0; i--) {
+      const s = L[i];
+      if (s.t === 'x') { const el = [...p.lay.children].find((x) => x._s === s); if (el) { const b = el.getBoundingClientRect(); if (e.clientX >= b.left - 6 && e.clientX <= b.right + 6 && e.clientY >= b.top - 6 && e.clientY <= b.bottom + 6) return s; } continue; }
+      if (!s.pts) continue;
+      // المسافة بالبكسل على الشاشة (حتى يسهل اللمس بالإصبع على الهاتف)
+      const r = p.cv.getBoundingClientRect(), kx = r.width / 10000, ky = r.height / 10000;
+      const tol = Math.max(e.pointerType === 'touch' || matchMedia('(pointer:coarse)').matches ? 20 : 12, s.w / 1000 * r.width / 2 + 8), P = s.pts;
+      const D = (x, y) => Math.hypot((x - q[0]) * kx, (y - q[1]) * ky);
+      if (P.length === 2) { if (D(P[0], P[1]) < tol) return s; continue; }
+      for (let k = 2; k < P.length; k += 2) {
+        const ax = P[k - 2], ay = P[k - 1], bx = P[k], by = P[k + 1], dx = (bx - ax) * kx, dy = (by - ay) * ky, l2 = dx * dx + dy * dy;
+        const t = l2 ? Math.max(0, Math.min(1, ((q[0] - ax) * kx * dx + (q[1] - ay) * ky * dy) / l2)) : 0;
+        if (D(ax + t * (bx - ax), ay + t * (by - ay)) < tol) return s;
+      }
+    }
+    return null;
+  }
+  DOC.addEventListener('click', (e) => {
+    if (st.tool || e.target.closest('.pvobj,.pvselbox,.pvzbar,.pvtsel,.pvadd,button,select,textarea')) return;
+    const p = pageOf(e); if (!p) return;
+    const s = hitItem(p, pos(p, e), e);
+    if (s) { clearSel(); selectItems(p, [s]); }
+    else if (sel) clearSel();
+  });
   function inBox(q, s) { const b = s.box, dx = s.off[0] * 10000, dy = s.off[1] * 10000; return q[0] >= b[0] + dx && q[0] <= b[2] + dx && q[1] >= b[1] + dy && q[1] <= b[3] + dy; }
-  function placeSelBox() { const b = sel.box, dx = sel.off[0] * 100, dy = sel.off[1] * 100; Object.assign(sel.el.style, { left: (b[0] / 100 + dx) + '%', top: (b[1] / 100 + dy) + '%', width: ((b[2] - b[0]) / 100) + '%', height: ((b[3] - b[1]) / 100) + '%' }); }
+  function placeSelBox() { const b = sel.box, dx = sel.off[0] * 100, dy = sel.off[1] * 100, f = sel.scale || 1; Object.assign(sel.el.style, { left: (b[0] / 100 + dx) + '%', top: (b[1] / 100 + dy) + '%', width: ((b[2] - b[0]) * f / 100) + '%', height: ((b[3] - b[1]) * f / 100) + '%' }); sel.el.classList.toggle('low', b[1] + sel.off[1] * 10000 < 600); }
   function moveTexts() { const p = byKey[sel.pg]; p.lay.querySelectorAll('.pvx,.pvobj').forEach((t) => { if (sel.set.has(t._s)) { t.style.left = (t._s.x / 100 + sel.off[0] * 100) + '%'; t.style.top = (t._s.y / 100 + sel.off[1] * 100) + '%'; } }); }
   function finishMove() {
     if (!sel || (!sel.off[0] && !sel.off[1])) return;

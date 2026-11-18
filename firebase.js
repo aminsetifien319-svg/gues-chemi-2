@@ -7,7 +7,7 @@ import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, CACHE_SIZE_UNLIMITED,
   doc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch, query, orderBy, limit
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-import * as CFG from './firebase-config.js?v=80';
+import * as CFG from './firebase-config.js?v=85';
 const firebaseConfig = CFG.firebaseConfig;
 
 export const configMissing = !firebaseConfig.apiKey || String(firebaseConfig.apiKey).indexOf('PASTE') === 0;
@@ -155,13 +155,45 @@ export async function saveProgress(email, json) {
 }
 
 /* ---------- ملاحظات الطالب على الدرس PDF (خاصة به، لكل فصل وثيقة) ---------- */
+// كل صفحة في وثيقة مستقلة (notes/<email>/ch/<chapter>/pg/<page>) حتى لا يوجد حدّ لحجم الملاحظات.
+// الوثيقة الرئيسية تحمل الباقي فقط (صفحات الملاحظات المضافة، العلامات…). نكتب الصفحات التي تغيّرت فقط.
+const NOTE_SENT = {};   // آخر ما حُفظ لكل صفحة: لنكتب المتغيّر فقط
 export async function loadNotes(email, cid) {
-  const ref = doc(db, C('notes'), lower(email), 'ch', String(cid));
-  const s = await fromServer(ref).catch(() => getDoc(ref));
-  return s.exists() ? s.data().json : null;
+  const base = doc(db, C('notes'), lower(email), 'ch', String(cid));
+  const s = await fromServer(base).catch(() => getDoc(base));
+  if (!s.exists()) { NOTE_SENT[cid] = {}; return null; }
+  let meta = null; try { meta = JSON.parse(s.data().json); } catch (e) { return s.data().json; }
+  if (!meta || meta.v !== 2) { NOTE_SENT[cid] = {}; return s.data().json; }   // الصيغة القديمة: وثيقة واحدة
+  const q = await getDocs(collection(base, 'pg'));
+  const sent = {}, p = {};
+  q.docs.forEach((d) => { const j = d.data().json; sent[d.id] = j; try { p[d.id] = JSON.parse(j); } catch (e) {} });
+  NOTE_SENT[cid] = sent;
+  delete meta.keys; meta.p = p;
+  return JSON.stringify(meta);
 }
 export async function saveNotes(email, cid, json) {
-  await setDoc(doc(db, C('notes'), lower(email), 'ch', String(cid)), { json: json, updatedAt: serverTimestamp() });
+  const base = doc(db, C('notes'), lower(email), 'ch', String(cid));
+  const d = JSON.parse(json), P = d.p || {}; delete d.p; d.v = 2; d.keys = Object.keys(P);
+  const sent = NOTE_SENT[cid] || {}, next = Object.assign({}, sent);
+  const ops = [];
+  Object.keys(P).forEach((k) => {
+    const j = JSON.stringify(P[k]);
+    if (j.length > 950000) { const e = new Error('page-full'); e.code = 'page-full'; e.page = k; throw e; }
+    if (sent[k] !== j) { ops.push(['set', k, j]); next[k] = j; }
+  });
+  Object.keys(sent).forEach((k) => { if (!(k in P)) { ops.push(['del', k]); delete next[k]; } });
+  let meta = JSON.stringify(d); if (meta.length > 900000) { delete d.oc; meta = JSON.stringify(d); }
+  // على دفعات (حدود Firestore: 500 عملية و~10MB لكل دفعة)، والوثيقة الرئيسية في الأخير
+  let b = writeBatch(db), n = 0, size = 0;
+  for (const o of ops) {
+    const sz = o[0] === 'set' ? o[2].length : 50;
+    if (n >= 400 || size + sz > 8000000) { await b.commit(); b = writeBatch(db); n = 0; size = 0; }
+    if (o[0] === 'set') b.set(doc(base, 'pg', o[1]), { json: o[2], updatedAt: serverTimestamp() }); else b.delete(doc(base, 'pg', o[1]));
+    n++; size += sz;
+  }
+  b.set(base, { json: meta, updatedAt: serverTimestamp() });
+  await b.commit();
+  NOTE_SENT[cid] = next;
 }
 
 // صور وتسجيلات الطالب داخل ملاحظاته (كل ملف وثيقة مستقلة، خاصة به)

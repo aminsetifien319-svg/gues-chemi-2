@@ -3,10 +3,10 @@ import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing,
   YEAR, YEAR_EXPLICIT, YEAR_AR, YEAR_EN, hasYear, switchYear, loadNotes, saveNotes, loadMedia, saveMedia, listChats, saveChat, delChat, cacheDoc
-} from './firebase.js?v=80';
-import { mountPdf } from './pdfv.js?v=80';
-import { fmt, typeset } from './rich.js?v=80';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=80';
+} from './firebase.js?v=85';
+import { mountPdf } from './pdfv.js?v=85';
+import { fmt, typeset } from './rich.js?v=85';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=85';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -224,7 +224,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 80;
+const APP_V = 85;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -431,6 +431,7 @@ function parse() {
   if (h[0] === 'stats') return { v: 'stats' };
   if (h[0] === 'mistakes') return { v: 'mistakes' };
   if (h[0] === 'fav') return { v: 'fav' };
+  if (h[0] === 'mine') return { v: 'mine', tab: h[1] || 'bm' };
   if (h[0] === 'progress') return { v: 'progress' };
   if (h[0] === 'search') return { v: 'search', q: decodeURIComponent(raw.slice(7) || '') };
   if (h[0] === 'today') return { v: 'review', src: 'today', i: n(h[1]) - 1 };
@@ -472,6 +473,7 @@ function router() {
   else if (r.v === 'quiz') practice(r);
   else if (r.v === 'mistakes') mistakes();
   else if (r.v === 'fav') favorites();
+  else if (r.v === 'mine') minePage(r.tab);
   else if (r.v === 'progress') progressPage();
   else if (r.v === 'search') searchPage(r.q);
   else if (r.v === 'review') review(r);
@@ -503,6 +505,7 @@ function side(r) {
     '<a class="sl' + (r.v === 'review' && r.src === 'today' ? ' on' : '') + '" href="#/today"><i class="ico">↻</i>مراجعة اليوم' + (nd ? '<em class="lat live">' + nd + '</em>' : '') + '</a>' +
     '<a class="sl' + (r.v === 'cards' || r.v === 'deck' ? ' on' : '') + '" href="#/cards"><i class="ico">❐</i>بطاقات المراجعة' + (fcDueAll() ? '<em class="lat live">' + fcDueAll() + '</em>' : '') + '</a>' +
     '<a class="sl' + (/^exam/.test(r.v) ? ' on' : '') + '" href="#/exam"><i class="ico">⏱</i>امتحان تجريبي' + ex + '</a>' +
+    '<a class="sl' + (r.v === 'mine' ? ' on' : '') + '" href="#/mine"><i class="ico">📌</i>مراجعتي (ملاحظاتي)</a>' +
     '<a class="sl' + (r.v === 'mistakes' || (r.v === 'review' && r.src.indexOf('wrong') === 0) ? ' on' : '') + '" href="#/mistakes"><i class="ico">✗</i>أخطائي' + (nw ? '<em class="lat bad">' + nw + '</em>' : '') + '</a>' +
     '<a class="sl' + (r.v === 'fav' || (r.v === 'review' && r.src === 'fav') ? ' on' : '') + '" href="#/fav"><i class="ico">★</i>المفضلة' + (nf ? '<em class="lat">' + nf + '</em>' : '') + '</a>' +
     '<p class="sh">الشابيطرات</p>';
@@ -809,6 +812,7 @@ function home() {
     '<div class="ov"><span>الدروس</span><span class="pbar"><i style="width:' + pct(tr, tp) + '%"></i></span><b class="lat">' + pct(tr, tp) + '%</b></div>' +
     '<div class="ov"><span>الكيسيام</span><span class="pbar"><i style="width:' + pct(ta, tq) + '%"></i></span><b class="lat">' + pct(ta, tq) + '%</b></div>' +
     '<div class="ov"><span>الإجابات الصحيحة</span><span class="pbar ok"><i style="width:' + pct(tok, ta) + '%"></i></span><b class="lat">' + pct(tok, ta) + '%</b></div></div>' +
+    '<a class="minebn" href="#/mine"><b>📌 مراجعتي</b><small>كل ما ظلّلته وعلّمته ⭐ وغطّيته بشريط المراجعة وكتبته في الدروس، في مكان واحد</small><i>افتح ←</i></a>' +
     '<div class="tools five">' +
     '<a class="tool today" href="#/today"><i>↻</i><b>مراجعة اليوم</b><small>' + (nd ? '<span class="lat">' + nd + '</span> سؤالاً حان موعد مراجعته' : 'لا شيء اليوم، أحسنت') + '</small></a>' +
     '<a class="tool exam" href="#/exam"><i>⏱</i><b>' + (prog.exam ? 'امتحان جارٍ' : 'امتحان تجريبي') + '</b><small>' + (prog.exam ? 'الوقت المتبقي <span class="lat" data-timer>' + fmtT(examLeft()) + '</span>' : lastEx ? 'آخر نتيجة: <span class="lat">' + lastEx.ok + '/' + lastEx.n + '</span> (' + pct(lastEx.ok, lastEx.n) + '%)' : '20 إلى 100 سؤال بالوقت الذي تختاره') + '</small></a>' +
@@ -997,7 +1001,7 @@ window.addEventListener('online', netBar); window.addEventListener('offline', ne
 let aiOn = false;
 function startAI() {
   if (aiOn) return; aiOn = true;
-  import('./ai.js?v=80').then((m) => m.mountAI({
+  import('./ai.js?v=85').then((m) => m.mountAI({
     email: () => (me && me.email) || '',
     getCtx: aiCtx,
     listChats: () => listChats(me.email), saveChat: (id, j) => saveChat(me.email, id, j), delChat: (id) => delChat(me.email, id)
@@ -1198,6 +1202,71 @@ function mistakes() {
     (all.length ? '<h2 class="h2">الأسئلة</h2><div class="mqs">' + chips + '</div>' : '') + '</div>';
 }
 
+/* ---------- «مراجعتي»: ما ظلّله الطالب وعلّمه وغطّاه وكتبه في كل الدروس ---------- */
+const MINE_TABS = [['bm', '⭐ العلامات'], ['hl', '🖍 ما ظلّلته'], ['tp', '🩹 بطاقات الشريط'], ['nt', '📝 ملاحظاتي']];
+async function minePage(tab) {
+  const myId = renderId;
+  VIEW.innerHTML = '<div class="wrap narrow">' + crumbs([['مراجعتي']]) + '<header class="phead"><h1>📌 مراجعتي</h1><p>كل ما ظلّلته وعلّمته وغطّيته بشريط المراجعة وكتبته في الدروس PDF.</p></header><div class="card"><p>جارٍ جمع ملاحظاتك من كل الدروس…</p></div></div>';
+  const chs = allCh().filter((c) => c.pdf && c.pdf.length);
+  const res = { bm: [], hl: [], tp: [], nt: [] };
+  const lineText = (TXp, b) => {   // نص الدرس تحت مستطيل (من طبقة النص)
+    if (!TXp) return '';
+    const out = [];
+    TXp.forEach((l) => {
+      const oy = Math.min(l[3], b[3]) - Math.max(l[1], b[1]), ox = Math.min(l[2], b[2]) - Math.max(l[0], b[0]);
+      if (oy <= (l[3] - l[1]) * 0.35 || ox <= 0) return;
+      let t = l[4]; const frac = ox / Math.max(1, l[2] - l[0]);
+      if (frac < 0.85 && !/[\u0600-\u06FF]/.test(t)) { const a = Math.max(0, Math.floor((Math.max(l[0], b[0]) - l[0]) / (l[2] - l[0]) * t.length)), z = Math.ceil((Math.min(l[2], b[2]) - l[0]) / (l[2] - l[0]) * t.length); t = t.slice(a, z); }
+      if (t.trim()) out.push(t.trim());
+    });
+    return out.join(' ');
+  };
+  await Promise.all(chs.map(async (ch) => {
+    let d = null; try { const j = await loadNotes(me.email, ch.id); d = j ? JSON.parse(j) : null; } catch (e) {}
+    if (!d) { try { d = JSON.parse(localStorage.getItem('gueschemi.pvn.' + me.email + '.' + ch.id) || 'null'); } catch (e) {} }
+    if (!d || !d.p) return;
+    const P = d.p, lesson = (k) => /^\d+$/.test(k);
+    const needTX = Object.keys(P).some((k) => lesson(k) && P[k].some((s) => s.t === 'h' || s.t === 'tp')) || (d.bm || []).length;
+    let TX = null; if (needTX && ch.pdfT) { try { TX = JSON.parse(await getImage(ch.pdfT)).p || null; } catch (e) {} }
+    const link = (k) => '#/c/' + ch.id + '/pdf/' + (lesson(k) ? (+k + 1) : 1);
+    const where = (k) => lesson(k) ? 'ص ' + (+k + 1) : 'صفحة ملاحظات';
+    (d.bm || []).forEach((k) => res.bm.push({ ch: ch, k: k, href: link(k), where: where(k), sn: lesson(k) && TX && TX[+k] ? TX[+k].slice(0, 3).map((l) => l[4]).join(' ').slice(0, 140) : '' }));
+    Object.keys(P).forEach((k) => {
+      if (/^(tr|te)/.test(k)) return;   // سلة المحذوفات
+      P[k].forEach((s) => {
+        if (s.t === 'h' && lesson(k)) {
+          let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (let i = 0; i < s.pts.length; i += 2) { x0 = Math.min(x0, s.pts[i]); y0 = Math.min(y0, s.pts[i + 1]); x1 = Math.max(x1, s.pts[i]); y1 = Math.max(y1, s.pts[i + 1]); }
+          const pad = 120, t = lineText(TX && TX[+k], [x0, y0 - pad, x1, y1 + pad]);
+          res.hl.push({ ch: ch, k: k, href: link(k), where: where(k), t: t, c: s.c });
+        } else if (s.t === 'tp') {
+          res.tp.push({ ch: ch, k: k, href: link(k), where: where(k), t: lesson(k) ? lineText(TX && TX[+k], [s.x, s.y, s.x + s.w, s.y + (s.h || 200)]) : '' });
+        } else if (s.t === 'x' && (s.s || '').trim()) res.nt.push({ ch: ch, k: k, href: link(k), where: where(k), t: s.s.trim() });
+        else if (s.t === 'ck') (s.v || []).forEach((it) => { if ((it.s || '').trim()) res.nt.push({ ch: ch, k: k, href: link(k), where: where(k), t: (it.d ? '☑ ' : '☐ ') + it.s.trim() }); });
+        else if (s.t === 'tb' && (s.v || []).some(Boolean)) res.nt.push({ ch: ch, k: k, href: link(k), where: where(k), t: '▦ ' + (s.v || []).filter(Boolean).join(' | ') });
+      });
+      if (d.oc && d.oc[k] && d.oc[k].t) res.nt.push({ ch: ch, k: k, href: link(k), where: where(k), t: '✍️ ' + d.oc[k].t });
+    });
+  }));
+  if (myId !== renderId) return;
+  // دمج التظليلات المتتالية في نفس الصفحة بنفس النص
+  const seen = new Set(); res.hl = res.hl.filter((x) => { const key = x.ch.id + x.k + x.t; if (seen.has(key)) return false; seen.add(key); return true; });
+  const cur = MINE_TABS.some((t) => t[0] === tab) ? tab : 'bm', L = res[cur];
+  const byCh = {}; L.forEach((x) => { (byCh[x.ch.id] = byCh[x.ch.id] || []).push(x); });
+  const order = (a, b) => (+a.k || 0) - (+b.k || 0);
+  const item = (x) => {
+    if (cur === 'tp') return '<div class="mineit tpc"><button type="button" class="tpcard" data-act="tpflip">' + (x.t ? '<span class="cov">🩹 اضغط لكشف ما تحت الشريط</span><span class="txt">' + esc(x.t) + '</span>' : '<span class="cov">🩹 شريط على صورة أو رسم</span><span class="txt">افتح الصفحة لتراه</span>') + '</button><a href="' + x.href + '" class="go">' + x.where + ' ←</a></div>';
+    if (cur === 'hl') return '<div class="mineit"><span class="hlt" style="--hc:' + esc(x.c || '#fde047') + '">' + (x.t ? esc(x.t) : '<i>تظليل على رسم أو صورة</i>') + '</span><a href="' + x.href + '" class="go">' + x.where + ' ←</a></div>';
+    if (cur === 'bm') return '<a class="mineit bm" href="' + x.href + '"><b>⭐ ' + x.where + '</b><small>' + esc(x.sn || '') + '</small></a>';
+    return '<div class="mineit"><span class="nt">' + esc(x.t).replace(/\n/g, '<br>') + '</span><a href="' + x.href + '" class="go">' + x.where + ' ←</a></div>';
+  };
+  const empty = { bm: 'علّم الصفحات المهمة بـ ⭐ من زر ▦ «كل الصفحات» داخل الدرس PDF.', hl: 'ظلّل الأفكار المهمة بقلم التظليل داخل الدرس PDF، وستظهر هنا.', tp: 'غطِّ التعاريف والأجوبة بأداة 🩹 «شريط المراجعة» داخل الدرس PDF، ثم راجعها هنا كبطاقات.', nt: 'ما تكتبه بلوحة المفاتيح، وقوائم المهام والجداول، وخط يدك بعد البحث فيه، يظهر هنا.' };
+  VIEW.innerHTML = '<div class="wrap narrow">' + crumbs([['مراجعتي']]) +
+    '<header class="phead"><h1>📌 مراجعتي</h1><p>كل ما ظلّلته وعلّمته وغطّيته بشريط المراجعة وكتبته في الدروس PDF. اضغط على رقم الصفحة لتفتحها.</p></header>' +
+    '<div class="minetabs">' + MINE_TABS.map((t) => '<a href="#/mine/' + t[0] + '" class="' + (t[0] === cur ? 'on' : '') + '">' + t[1] + ' <span class="lat">' + res[t[0]].length + '</span></a>').join('') + '</div>' +
+    (cur === 'tp' && L.length ? '<p class="acts" style="margin:0 0 10px"><button type="button" class="btn sm" data-act="tpall">👀 كشف الكل / إخفاء الكل</button></p>' : '') +
+    (L.length ? Object.keys(byCh).map((id) => { const ch = byCh[id][0].ch; return '<section class="minech" style="--c:var(--c' + ch.id + ')"><h2 class="h2"><span class="lat">CH ' + cn(ch) + '</span> ' + esc(ch.ar) + ' <small class="lat">' + byCh[id].length + '</small></h2>' + byCh[id].sort(order).map(item).join('') + '</section>'; }).join('')
+      : '<div class="empty card"><b>لا شيء هنا بعد</b><p>' + empty[cur] + '</p></div>') + '</div>';
+}
 function favorites() {
   const pages = favPages(), qs = favKeys();
   const pl = pages.map((x) => '<a class="tile" href="#/c/' + x.ch.id + '/p/' + x.p.n + '" style="border-color:var(--c' + x.ch.id + ')"><b>' + esc(x.p.secAr) + ' <small class="lat">CH ' + cn(x.ch) + '</small></b><small class="lat">' + esc(x.p.t) + '</small></a>').join('');
@@ -1678,6 +1747,8 @@ document.addEventListener('click', async (e) => {
     else if (act === 'request') { a.disabled = true; try { await sendRequest(me); gPending(me); } catch (err) { gError(friendly(err)); } }
     else if (act === 'recheck') onUser(me);
     else if (act === 'dlall') downloadAll();
+    else if (act === 'tpflip') a.classList.toggle('open');
+    else if (act === 'tpall') { const L = $$('.tpcard'), open = !L.every((x) => x.classList.contains('open')); L.forEach((x) => x.classList.toggle('open', open)); }
     else if (act === 'dl') { const ch = [].concat(...Object.values(MS || {}).map((m) => m.chapters || [])).find((c) => String(c.id) === a.dataset.ch) || (M && M.chapters.find((c) => String(c.id) === a.dataset.ch)); if (ch) downloadCh(ch, a); }
     else if (act === 'swapdev') { if (confirm('استبدال هذا الجهاز بالجهاز الحالي؟ لن تتمكن من استبدال آخر قبل ' + SWAP_DAYS + ' يوماً.')) swapDevice(a.dataset.id); }
     else if (act === 'aiq') { if (window.__gcAsk) window.__gcAsk(null, 'اشرح لي هذا السؤال: ما المطلوب، ولماذا كل اقتراح صحيح أو خاطئ، اعتماداً على الدرس.'); }

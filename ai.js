@@ -1,6 +1,6 @@
 // مساعد Gemini داخل الموقع (Firebase AI Logic · Gemini Developer API).
 // يعمل في نسخة Firebase منفصلة (12.x) حتى لا يمسّ باقي الموقع: إن فشل، يبقى الموقع سليماً.
-import * as CFG from './firebase-config.js?v=80';
+import * as CFG from './firebase-config.js?v=85';
 
 const V = '12.12.1';
 const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-3-flash-preview'];
@@ -224,5 +224,33 @@ export function mountAI(o) {
   TA.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(TA.value); } });
   TA.addEventListener('input', () => { TA.style.height = 'auto'; TA.style.height = Math.min(120, TA.scrollHeight) + 'px'; });
   window.__gcAsk = (q, ask) => open(q, ask);
+  // حل عملية حسابية مكتوبة بخط اليد (مثل Math Notes)
+  window.__gcMath = async (b64) => {
+    const { AI, ai } = await load();
+    let last = null;
+    for (let k = 0; k < MODELS.length; k++) {
+      const idx = (mIdx + k) % MODELS.length;
+      try {
+        const model = AI.getGenerativeModel(ai, { model: MODELS[idx], generationConfig: { maxOutputTokens: 200, temperature: 0 } });
+        const r = await model.generateContent([{ inlineData: { mimeType: 'image/png', data: b64 } }, { text: 'هذه عملية رياضية أو كيميائية مكتوبة بخط اليد (قد تنتهي بعلامة =). احسبها بدقة. أجب بالنتيجة فقط مسبوقة بـ "= " (مثال: = 100 أو = 2.5 mol/L)، دون أي شرح. إن لم تكن هناك عملية واضحة أجب بكلمة: لا يوجد' }]);
+        mIdx = idx; return r.response.text();
+      } catch (e) { last = e; if (!/quota|429|exhaust|rate|404|not found|not supported|unsupported|invalid.*model|model/i.test(String(e && e.message || e))) break; }
+    }
+    throw last;
+  };
+  // تحويل خط اليد إلى نص (يُستدعى من قارئ الـPDF)
+  window.__gcOCR = async (b64) => {
+    const { AI, ai } = await load();
+    let last = null;
+    for (let k = 0; k < MODELS.length; k++) {
+      const idx = (mIdx + k) % MODELS.length;
+      try {
+        const model = AI.getGenerativeModel(ai, { model: MODELS[idx], generationConfig: { maxOutputTokens: 800, temperature: 0 } });
+        const r = await model.generateContent([{ inlineData: { mimeType: 'image/png', data: b64 } }, { text: 'هذه صورة لكتابة بخط اليد لطالب صيدلة (عربية أو فرنسية أو إنجليزية أو رموز كيميائية). انسخ النص كما هو بالضبط مع الحفاظ على الأسطر، دون أي شرح أو إضافة. إن لم توجد كتابة مقروءة أجب بكلمة: لا يوجد' }]);
+        mIdx = idx; return r.response.text();
+      } catch (e) { last = e; if (!/quota|429|exhaust|rate|404|not found|not supported|unsupported|invalid.*model|model/i.test(String(e && e.message || e))) break; }
+    }
+    throw last;
+  };
   return { open: open, close: close };
 }

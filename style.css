@@ -1396,3 +1396,8 @@ body.pdfmode #gcai{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .pvrec{position:fixed;left:50%;transform:translateX(-50%);top:calc(var(--top) + 64px);z-index:70;display:flex;align-items:center;gap:10px;background:#111827;color:#fff;padding:8px 10px 8px 14px;border-radius:24px;box-shadow:0 8px 24px rgba(0,0,0,.35);font:700 14px Cairo,sans-serif}
 .pvrec i{width:12px;height:12px;border-radius:50%;background:#ef4444;animation:aiw 1s infinite}
 .pvrec button{border:0;background:#ef4444;color:#fff;border-radius:16px;padding:6px 12px;font:700 13px Cairo,sans-serif;cursor:pointer}
+
+/* v71: إخفاء شارة reCAPTCHA (مع ذكر الحماية في نافذة المساعد كما تشترط Google) */
+.grecaptcha-badge{visibility:hidden!important;opacity:0!important;pointer-events:none!important}
+.airc{margin:0;padding:0 12px 8px;font-size:10px;color:var(--mut)}
+.airc a{color:inherit;text-decoration:underline}

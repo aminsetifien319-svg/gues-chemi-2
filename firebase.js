@@ -7,7 +7,7 @@ import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache,
   doc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-import * as CFG from './firebase-config.js?v=68';
+import * as CFG from './firebase-config.js?v=71';
 const firebaseConfig = CFG.firebaseConfig;
 
 export const configMissing = !firebaseConfig.apiKey || String(firebaseConfig.apiKey).indexOf('PASTE') === 0;
@@ -18,7 +18,7 @@ if (!configMissing) {
   if (CFG.appCheckSiteKey) {
     // يُحمَّل فقط عند تفعيله، حتى لا يتعطل الموقع إن لم يُضبط
     import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-check.js').then((m) => {
-      try { m.initializeAppCheck(app, { provider: new m.ReCaptchaV3Provider(CFG.appCheckSiteKey), isTokenAutoRefreshEnabled: true }); } catch (e) {}
+      try { m.initializeAppCheck(app, { provider: CFG.appCheckEnterprise ? new m.ReCaptchaEnterpriseProvider(CFG.appCheckSiteKey) : new m.ReCaptchaV3Provider(CFG.appCheckSiteKey), isTokenAutoRefreshEnabled: true }); } catch (e) {}
     }).catch(() => {});
   }
   auth = getAuth(app);

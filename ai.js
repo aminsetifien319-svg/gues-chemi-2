@@ -1,6 +1,6 @@
 // مساعد Gemini داخل الموقع (Firebase AI Logic · Gemini Developer API).
 // يعمل في نسخة Firebase منفصلة (12.x) حتى لا يمسّ باقي الموقع: إن فشل، يبقى الموقع سليماً.
-import * as CFG from './firebase-config.js?v=68';
+import * as CFG from './firebase-config.js?v=71';
 
 const V = '12.12.1';
 const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-3-flash-preview'];
@@ -20,7 +20,7 @@ function load() {
   ]).then(async ([A, AI]) => {
     const app = A.getApps().find((x) => x.name === 'gcai') || A.initializeApp(CFG.firebaseConfig, 'gcai');
     if (CFG.appCheckSiteKey) {
-      try { const C = await import('https://www.gstatic.com/firebasejs/' + V + '/firebase-app-check.js'); C.initializeAppCheck(app, { provider: new C.ReCaptchaV3Provider(CFG.appCheckSiteKey), isTokenAutoRefreshEnabled: true }); } catch (e) {}
+      try { const C = await import('https://www.gstatic.com/firebasejs/' + V + '/firebase-app-check.js'); C.initializeAppCheck(app, { provider: CFG.appCheckEnterprise ? new C.ReCaptchaEnterpriseProvider(CFG.appCheckSiteKey) : new C.ReCaptchaV3Provider(CFG.appCheckSiteKey), isTokenAutoRefreshEnabled: true }); } catch (e) {}
     }
     const ai = AI.getAI(app, { backend: new AI.GoogleAIBackend() });
     return { AI: AI, ai: ai };
@@ -88,7 +88,7 @@ export function mountAI(o) {
     '<div class="aisugg"><button type="button" data-q="اشرح لي هذه الصفحة ببساطة">اشرح هذه الصفحة</button><button type="button" data-q="لخّص لي هذه الصفحة في نقاط قصيرة">لخّص الصفحة</button><button type="button" data-q="اطرح عليّ 3 أسئلة كيسيام عن هذه الصفحة مع الحل">اختبرني</button></div></div></div>' +
     '<div class="aiquote" hidden><span></span><button type="button" data-ai="unquote" aria-label="إزالة">✕</button></div>' +
     '<form class="aiform"><textarea rows="1" placeholder="اكتب سؤالك…" dir="auto"></textarea><button type="submit" aria-label="إرسال">➤</button></form>' +
-    '<p class="ainote">قد يخطئ Gemini أحياناً: تحقّق دائماً من الدرس. <span class="aileft"></span></p></section>';
+    '<p class="ainote">قد يخطئ Gemini أحياناً: تحقّق دائماً من الدرس. <span class="aileft"></span></p><p class="airc">محمي بـ reCAPTCHA وتنطبق <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">سياسة الخصوصية</a> و<a href="https://policies.google.com/terms" target="_blank" rel="noopener">شروط الخدمة</a> من Google.</p></section>';
   document.body.appendChild(root);
   const $ = (s) => root.querySelector(s);
   const P = $('.aipanel'), M = $('.aimsgs'), TA = $('textarea'), Q = $('.aiquote');

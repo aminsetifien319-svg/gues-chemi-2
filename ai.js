@@ -1,6 +1,6 @@
 // مساعد Gemini داخل الموقع (Firebase AI Logic · Gemini Developer API).
 // يعمل في نسخة Firebase منفصلة (12.x) حتى لا يمسّ باقي الموقع: إن فشل، يبقى الموقع سليماً.
-import * as CFG from './firebase-config.js?v=85';
+import * as CFG from './firebase-config.js?v=88';
 
 const V = '12.12.1';
 const MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-3-flash-preview'];
@@ -118,7 +118,7 @@ export function mountAI(o) {
   }
 
   const root = document.createElement('div'); root.id = 'gcai';
-  root.innerHTML = '<button type="button" class="aifab" aria-label="اسأل Gemini" title="اسأل Gemini عن الدرس"><span>✨</span><b>اسأل Gemini</b></button>' +
+  root.innerHTML = '<button type="button" class="aifab" aria-label="اسأل Gemini" title="اسأل Gemini عن الدرس (اسحبه لتغيير مكانه)"><span>✨</span></button>' +
     '<section class="aipanel" hidden role="dialog" aria-label="مساعد Gemini">' +
     '<header><div><b>✨ مساعد Gemini</b><small class="aictx"></small></div><button type="button" class="aix" data-ai="hist" title="محادثاتي السابقة">🕘</button><button type="button" class="aix" data-ai="new" title="محادثة جديدة">↺</button><button type="button" class="aix" data-ai="close" aria-label="إغلاق">✕</button></header>' +
     '<div class="aimsgs"><div class="aiwel"><p>اسألني عن أي شيء في الدرس: شرح فكرة، تلخيص صفحة، الفرق بين مفهومين، أو لماذا جواب كيسيام صحيح.</p>' +
@@ -197,7 +197,39 @@ export function mountAI(o) {
     busy = false;
   }
 
-  $('.aifab').addEventListener('click', () => (P.hidden ? open() : close()));
+  /* زر صغير يمكن سحبه إلى أي مكان على حافة الشاشة، ويختفي أثناء التمرير للأسفل */
+  const FAB = $('.aifab');
+  const FKEY = 'gueschemi.aifab';
+  let fpos = null; try { fpos = JSON.parse(localStorage.getItem(FKEY) || 'null'); } catch (e) {}
+  function placeFab() {
+    if (!fpos) { FAB.style.left = FAB.style.right = FAB.style.top = ''; return; }
+    const h = window.innerHeight, y = Math.max(70, Math.min(h - 70, fpos.y * h));
+    FAB.style.top = (y - 22) + 'px'; FAB.style.bottom = 'auto';
+    if (fpos.side === 'r') { FAB.style.right = '10px'; FAB.style.left = 'auto'; } else { FAB.style.left = '10px'; FAB.style.right = 'auto'; }
+  }
+  placeFab(); window.addEventListener('resize', placeFab);
+  let fd = null;
+  FAB.addEventListener('pointerdown', (e) => { fd = { x: e.clientX, y: e.clientY, moved: false }; try { FAB.setPointerCapture(e.pointerId); } catch (x) {} });
+  FAB.addEventListener('pointermove', (e) => {
+    if (!fd) return;
+    if (!fd.moved && Math.hypot(e.clientX - fd.x, e.clientY - fd.y) < 8) return;
+    fd.moved = true; FAB.classList.add('drag');
+    FAB.style.left = (e.clientX - 22) + 'px'; FAB.style.right = 'auto'; FAB.style.top = (e.clientY - 22) + 'px'; FAB.style.bottom = 'auto';
+  });
+  const fup = (e) => {
+    if (!fd) return; const d = fd; fd = null; FAB.classList.remove('drag');
+    if (!d.moved) { P.hidden ? open() : close(); return; }
+    fpos = { side: e.clientX > window.innerWidth / 2 ? 'r' : 'l', y: e.clientY / window.innerHeight };
+    try { localStorage.setItem(FKEY, JSON.stringify(fpos)); } catch (x) {}
+    placeFab();
+  };
+  FAB.addEventListener('pointerup', fup); FAB.addEventListener('pointercancel', () => { fd = null; FAB.classList.remove('drag'); });
+  let lastY = window.scrollY, hideT = 0;
+  window.addEventListener('scroll', () => {
+    const y = window.scrollY;
+    if (y > lastY + 6) FAB.classList.add('away'); else if (y < lastY - 6) FAB.classList.remove('away');
+    lastY = y; clearTimeout(hideT); hideT = setTimeout(() => FAB.classList.remove('away'), 1200);
+  }, { passive: true });
   root.addEventListener('click', (e) => {
     const b = e.target.closest('[data-ai],[data-q]'); if (!b) return;
     if (b.dataset.ai === 'close') close();

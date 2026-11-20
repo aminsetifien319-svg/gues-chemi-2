@@ -7,7 +7,7 @@ import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, CACHE_SIZE_UNLIMITED,
   doc, getDoc, getDocFromCache, getDocFromServer, onSnapshot, getDocs, setDoc, deleteDoc, collection, serverTimestamp, writeBatch, query, orderBy, limit
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
-import * as CFG from './firebase-config.js?v=85';
+import * as CFG from './firebase-config.js?v=88';
 const firebaseConfig = CFG.firebaseConfig;
 
 export const configMissing = !firebaseConfig.apiKey || String(firebaseConfig.apiKey).indexOf('PASTE') === 0;
@@ -206,6 +206,18 @@ export async function loadMedia(email, id) {
 export async function saveMedia(email, id, d) {
   await setDoc(doc(db, C('notesm'), lower(email), 'm', id), { d: d, updatedAt: serverTimestamp() });
 }
+
+/* ---------- بلاغات الطلبة عن الأخطاء ---------- */
+export async function sendReport(user, r) {
+  const ref = doc(collection(db, C('reports')));
+  await setDoc(ref, { email: lower(user.email), name: String(user.displayName || '').slice(0, 80), kind: String(r.kind || '').slice(0, 10), label: String(r.label || '').slice(0, 200), href: String(r.href || '').slice(0, 200), cat: String(r.cat || '').slice(0, 40), msg: String(r.msg || '').slice(0, 1000), st: 'new', at: serverTimestamp() });
+}
+export async function listReports() {
+  const s = await getDocs(query(collection(db, C('reports')), orderBy('at', 'desc'), limit(300)));
+  return s.docs.map((d) => Object.assign({ id: d.id }, d.data(), { at: d.data().at && d.data().at.toDate ? d.data().at.toDate() : null }));
+}
+export async function setReportStatus(id, st) { await setDoc(doc(db, C('reports'), id), { st: st }, { merge: true }); }
+export async function delReport(id) { await deleteDoc(doc(db, C('reports'), id)); }
 
 /* ---------- محادثات Gemini لكل طالب (سجلّه الخاص) ---------- */
 export async function listChats(email) {

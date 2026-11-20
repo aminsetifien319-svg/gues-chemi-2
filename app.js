@@ -2,11 +2,11 @@
 import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing,
-  YEAR, YEAR_EXPLICIT, YEAR_AR, YEAR_EN, hasYear, switchYear, loadNotes, saveNotes, loadMedia, saveMedia, listChats, saveChat, delChat, cacheDoc
-} from './firebase.js?v=85';
-import { mountPdf } from './pdfv.js?v=85';
-import { fmt, typeset } from './rich.js?v=85';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=85';
+  YEAR, YEAR_EXPLICIT, YEAR_AR, YEAR_EN, hasYear, switchYear, loadNotes, saveNotes, loadMedia, saveMedia, listChats, saveChat, delChat, cacheDoc, sendReport
+} from './firebase.js?v=88';
+import { mountPdf } from './pdfv.js?v=88';
+import { fmt, typeset } from './rich.js?v=88';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=88';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -224,7 +224,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 85;
+const APP_V = 88;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -1001,7 +1001,7 @@ window.addEventListener('online', netBar); window.addEventListener('offline', ne
 let aiOn = false;
 function startAI() {
   if (aiOn) return; aiOn = true;
-  import('./ai.js?v=85').then((m) => m.mountAI({
+  import('./ai.js?v=88').then((m) => m.mountAI({
     email: () => (me && me.email) || '',
     getCtx: aiCtx,
     listChats: () => listChats(me.email), saveChat: (id, j) => saveChat(me.email, id, j), delChat: (id) => delChat(me.email, id)
@@ -1042,6 +1042,7 @@ function page(ch, i) {
     '<div class="rbar"><i style="width:' + pct(i + 1, list.length) + '%;background:var(--c' + ch.id + ')"></i></div>' +
     '<div class="rtools">' + modeSwitch('p') + (viewMode !== 'orig' && ch.text ? langSwitch() : '') + '</div>' +
     vidBox(ch, p) + '<div class="lbody" id="lbody">' + (viewMode === 'orig' || !ch.text ? origFigs(ch, p) + '<p class="hint"><button type="button" class="btn sm" data-zoom>⤢ تكبير وملء الشاشة</button><span>على الهاتف: أدِر الشاشة أفقياً أو استعمل زر التكبير.</span></p>' : loading) + '</div>' +
+    '<p class="repline"><button type="button" class="btn sm ghost2 rep" data-act="report" data-kind="page" data-label="' + esc(subj(ch.sub).ar + ' · CH ' + cn(ch) + ' ' + ch.ar + ' · ' + p.secAr + ' · صفحة ' + (i + 1)) + '" data-href="#/c/' + ch.id + '/p/' + p.n + '">⚑ وجدت خطأ في هذه الصفحة؟</button></p>' +
     '<div class="pnav">' + nav(prev, 'prev') + endNext + '</div></div>';
   hydrate();
   chText(ch).then((T) => {
@@ -1102,6 +1103,7 @@ function qscreen(ctx) {
   if (live) action = '<button type="button" class="btn ghost2 flag' + (flagged ? ' on' : '') + '" data-q="flag">' + (flagged ? '⚑ مُعلَّم للمراجعة' : '⚐ علّم للمراجعة') + '</button>';
   else if (!r) action = '<button type="button" class="btn pri check" data-q="check"' + (sel.length ? '' : ' disabled') + '>تحقّق من الإجابة</button>';
   if (!live && it.ch.text) action += '<button type="button" class="btn ghost2 aiq" data-act="aiq">✨ اشرح مع Gemini</button>';
+  if (!live) action += '<button type="button" class="btn ghost2 rep" data-act="report" data-kind="q" data-label="' + esc(subj(it.ch.sub).ar + ' · CH ' + cn(it.ch) + ' ' + it.ch.ar + ' · ' + KIND_AR[it.set.key] + ' س' + it.q.n) + '" data-href="#/c/' + it.ch.id + '/q/' + it.set.key + '/' + (it.i + 1) + '" title="أبلغ عن خطأ في هذا السؤال">⚑ خطأ؟</button>';
   const prevB = i > 0 && !(ctx.noPrev) ? '<a class="btn" data-nav="prev" href="' + ctx.href(i - 1) + '">→ السابق</a>' : '<span></span>';
   const nextB = ctx.nextBtn ? ctx.nextBtn(i) : (i < keys.length - 1 ? '<a class="btn' + (r || live ? ' pri' : '') + '" data-nav="next" href="' + ctx.href(i + 1) + '">التالي ←</a>' : (ctx.end || '<span></span>'));
   const mid = mode === 'practice' && r ? '<button type="button" class="btn ghost2" data-q="retry">أعد هذا السؤال</button>' : '<span></span>';
@@ -1201,6 +1203,34 @@ function mistakes() {
     '<div class="mlist card">' + rows + '</div>' +
     (all.length ? '<h2 class="h2">الأسئلة</h2><div class="mqs">' + chips + '</div>' : '') + '</div>';
 }
+
+/* ---------- أبلغ عن خطأ: يصل البلاغ إلى صفحة الإدارة ---------- */
+const REP_CATS = { q: ['الجواب الصحيح خاطئ', 'خطأ في نص السؤال', 'خطأ في الترجمة', 'السؤال لا يظهر جيداً', 'أخرى'], page: ['معلومة خاطئة', 'خطأ في الترجمة', 'خطأ إملائي', 'صورة أو جدول لا يظهر', 'أخرى'], pdf: ['معلومة خاطئة', 'خطأ في الترجمة', 'صفحة لا تظهر', 'مشكلة في أدوات الكتابة', 'أخرى'] };
+function reportBox(r) {
+  const old = $('#repbox'); if (old) old.remove();
+  const cats = REP_CATS[r.kind] || REP_CATS.page;
+  const box = document.createElement('div'); box.id = 'repbox'; box.className = 'repbox'; box.setAttribute('role', 'dialog');
+  box.innerHTML = '<div class="repcard"><div class="rephead"><b>⚑ أبلغ عن خطأ</b><button type="button" class="aix" data-rx aria-label="إغلاق">✕</button></div>' +
+    '<p class="small">' + esc(r.label || '') + '</p><div class="repcats">' + cats.map((c, i) => '<button type="button" class="chip' + (i === 0 ? ' on' : '') + '" data-rc="' + esc(c) + '">' + esc(c) + '</button>').join('') + '</div>' +
+    '<textarea class="input" rows="4" maxlength="1000" placeholder="اشرح الخطأ باختصار (مثلاً: الجواب الصحيح هو B حسب الدرس صفحة 12)…"></textarea>' +
+    '<p class="acts"><button type="button" class="btn pri" data-rs>إرسال البلاغ</button><button type="button" class="btn" data-rx>إلغاء</button></p><p class="repmsg small" role="status"></p></div>';
+  document.body.appendChild(box);
+  const ta = box.querySelector('textarea'); setTimeout(() => ta.focus(), 50);
+  let cat = cats[0];
+  box.addEventListener('click', async (e) => {
+    if (e.target === box || e.target.closest('[data-rx]')) { box.remove(); return; }
+    const c = e.target.closest('[data-rc]'); if (c) { cat = c.dataset.rc; box.querySelectorAll('[data-rc]').forEach((x) => x.classList.toggle('on', x === c)); return; }
+    const s = e.target.closest('[data-rs]'); if (!s) return;
+    const msg = ta.value.trim(), out = box.querySelector('.repmsg');
+    if (msg.length < 3 && cat === 'أخرى') { out.textContent = 'اكتب وصفاً قصيراً للخطأ.'; return; }
+    const dk = 'gueschemi.rep.' + new Date().toISOString().slice(0, 10); let n = 0; try { n = +localStorage.getItem(dk) || 0; } catch (x) {}
+    if (n >= 15) { out.textContent = 'وصلت حد البلاغات اليوم (15). شكراً لك!'; return; }
+    s.disabled = true; out.textContent = 'جارٍ الإرسال…';
+    try { await sendReport(me, { kind: r.kind, label: r.label, href: r.href, cat: cat, msg: msg }); try { localStorage.setItem(dk, String(n + 1)); } catch (x) {} out.textContent = ''; box.querySelector('.repcard').innerHTML = '<div class="rephead"><b>✓ شكراً لك!</b><button type="button" class="aix" data-rx>✕</button></div><p>وصل بلاغك إلى المشرف، وسيُصحَّح الخطأ في أقرب تحديث.</p>'; setTimeout(() => { if (box.isConnected) box.remove(); }, 2500); }
+    catch (x) { s.disabled = false; out.textContent = navigator.onLine ? 'تعذّر الإرسال. حاول لاحقاً.' : 'تحتاج الإنترنت لإرسال البلاغ.'; }
+  });
+}
+window.__gcReport = (r) => reportBox(r);
 
 /* ---------- «مراجعتي»: ما ظلّله الطالب وعلّمه وغطّاه وكتبه في كل الدروس ---------- */
 const MINE_TABS = [['bm', '⭐ العلامات'], ['hl', '🖍 ما ظلّلته'], ['tp', '🩹 بطاقات الشريط'], ['nt', '📝 ملاحظاتي']];
@@ -1747,6 +1777,7 @@ document.addEventListener('click', async (e) => {
     else if (act === 'request') { a.disabled = true; try { await sendRequest(me); gPending(me); } catch (err) { gError(friendly(err)); } }
     else if (act === 'recheck') onUser(me);
     else if (act === 'dlall') downloadAll();
+    else if (act === 'report') reportBox({ kind: a.dataset.kind, label: a.dataset.label, href: a.dataset.href });
     else if (act === 'tpflip') a.classList.toggle('open');
     else if (act === 'tpall') { const L = $$('.tpcard'), open = !L.every((x) => x.classList.contains('open')); L.forEach((x) => x.classList.toggle('open', open)); }
     else if (act === 'dl') { const ch = [].concat(...Object.values(MS || {}).map((m) => m.chapters || [])).find((c) => String(c.id) === a.dataset.ch) || (M && M.chapters.find((c) => String(c.id) === a.dataset.ch)); if (ch) downloadCh(ch, a); }

@@ -59,6 +59,7 @@ export function mountPdf(root, o) {
     btn('text', 'كتابة بلوحة المفاتيح') + btn('pen', 'قلم') + btn('hl', 'قلم تظليل') + btn('er', 'ممحاة') + btn('lasso', 'تحديد') + (ch.pdfT ? btn('sel', 'تحديد نص من الدرس (نسخ، Google، Gemini)') : '') +
     '<button type="button" class="pvb" data-act="undo" aria-label="تراجع" disabled>' + I.undo + '</button><button type="button" class="pvb" data-act="redo" aria-label="إعادة" disabled>' + I.redo + '</button>' +
     '<button type="button" class="pvb" data-act="ins" aria-label="إدراج" title="إدراج: صورة، كاميرا، تسجيل صوتي، جدول، ملصق">' + I.plus + '</button>' + btn('tape', 'شريط المراجعة: غطِّ جواباً ثم اضغط لكشفه') + '<button type="button" class="pvb" data-act="ruler" aria-label="مسطرة" title="مسطرة لرسم خطوط مستقيمة">' + I.ruler + '</button><button type="button" class="pvb" data-act="pages" aria-label="كل الصفحات" title="كل الصفحات مصغّرة والعلامات ⭐">' + I.grid + '</button>' + '<button type="button" class="pvb" data-act="find" aria-label="البحث في ملاحظاتي" title="البحث في ملاحظاتي (حتى خط يدك)">' + I.search + '</button>' + btn('laser', 'مؤشر ليزر') + '<button type="button" class="pvb on" data-tool="" aria-label="قراءة وتمرير">' + I.hand + '</button>' +
+    '<button type="button" class="pvb pvai" data-act="ai" aria-label="اسأل Gemini" title="اسأل Gemini عن هذه الصفحة">✨</button>' +
     '<button type="button" class="pvb pvhelp" data-act="help" aria-label="مساعدة وتخصيص" title="شرح الأدوات وتخصيص الشريط">؟</button>' +
     '<button type="button" class="pvb pvpg" data-act="page" aria-label="إعدادات صفحة الملاحظات" title="إعدادات صفحة الملاحظات (اللون، النوع، الحذف)" hidden>' + I.pagecfg + '</button></div></div>';
   function btn(t, l) { return '<button type="button" class="pvb" data-tool="' + t + '" aria-label="' + l + '" title="' + l + '">' + I[t] + (t === 'pen' || t === 'hl' || t === 'text' ? '<i class="dot"></i>' : '') + '</button>'; }
@@ -317,7 +318,7 @@ export function mountPdf(root, o) {
     const el = document.createElement('div'); el.className = 'pvobj pv-' + s.t; el._s = s;
     el.style.left = s.x / 100 + '%'; el.style.top = s.y / 100 + '%'; el.style.width = s.w / 100 + '%';
     if (s.h) el.style.height = s.h / 100 + '%';
-    if (s.r) el.style.transform = 'rotate(' + s.r + 'deg)';
+    if (s.ro) el.style.transform = 'rotate(' + s.ro + 'deg)';   // ro = زاوية التدوير (r في الجدول = عدد الصفوف)
     if (s.t === 'i') {
       el.innerHTML = '<span class="sk">…</span>';
       media(s.m).then((src) => { el.innerHTML = ''; const im = new Image(); im.src = src; im.alt = ''; im.draggable = false; el.appendChild(im); }).catch(() => { el.innerHTML = '<span class="sk">تعذّر تحميل الصورة</span>'; });
@@ -380,10 +381,24 @@ export function mountPdf(root, o) {
     objSel = { p: p, el: el, s: el._s };
     el.classList.add('sel');
     const h = document.createElement('div'); h.className = 'pvobjbar';
-    h.innerHTML = '<span class="mv" title="تحريك">✥</span><button type="button" class="sz" data-o="smaller" title="تصغير">−</button><button type="button" class="sz" data-o="bigger" title="تكبير">+</button><button type="button" class="sz" data-o="rot" title="تدوير 90°">⟳</button><button type="button" data-o="del" title="حذف">' + I.trash + '</button>';
+    h.innerHTML = '<span class="mv" title="تحريك">✥</span><button type="button" class="sz" data-o="smaller" title="تصغير">−</button><button type="button" class="sz" data-o="bigger" title="تكبير">+</button><button type="button" data-o="del" title="حذف">' + I.trash + '</button>';
     el.appendChild(h);
     if (el.offsetTop < 44) h.style.top = 'calc(100% + 10px)';   // في أعلى الصفحة: الشريط تحت العنصر حتى لا يُخفى
     const rz = document.createElement('span'); rz.className = 'pvrz'; rz.title = 'تكبير/تصغير'; el.appendChild(rz);
+    // تدوير حر 360° بالسحب من المقبض الأخضر
+    const ro = document.createElement('span'); ro.className = 'pvrot'; ro.title = 'اسحب للتدوير'; ro.textContent = '⟳'; el.appendChild(ro);
+    ro.addEventListener('pointerdown', (e) => {
+      e.stopPropagation(); e.preventDefault(); try { ro.setPointerCapture(e.pointerId); } catch (x) {}
+      const b = el.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2, s0 = objSel.s, r0 = s0.ro || 0, a0 = Math.atan2(e.clientY - cy, e.clientX - cx);
+      let r = r0;
+      const mv = (ev) => { r = Math.round((((r0 + (Math.atan2(ev.clientY - cy, ev.clientX - cx) - a0) * 180 / Math.PI) % 360) + 360) % 360); el.style.transform = 'rotate(' + r + 'deg)'; el.dataset.deg = r + '°'; };
+      const up = () => {
+        ro.removeEventListener('pointermove', mv); ro.removeEventListener('pointerup', up); ro.removeEventListener('pointercancel', up); delete el.dataset.deg;
+        if (r === r0) return; const ns = Object.assign({}, s0, { ro: r }); if (!r) delete ns.ro;
+        const L = items(p.k), k = L.indexOf(s0); if (k < 0) return; L[k] = ns; el._s = ns; objSel.s = ns; commit({ pg: p.k, add: [ns], del: [s0] });
+      };
+      ro.addEventListener('pointermove', mv); ro.addEventListener('pointerup', up); ro.addEventListener('pointercancel', up);
+    });
     h.querySelector('[data-o="del"]').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); const s = objSel.s, pg = p.k; deselectObj(); const op = { pg: pg, add: [], del: [s] }; apply(op, false); commit(op); });
     const drag = (mode) => (e) => {
       e.stopPropagation(); e.preventDefault();
@@ -421,7 +436,7 @@ export function mountPdf(root, o) {
     h.querySelectorAll('.sz').forEach((b) => b.addEventListener('pointerdown', (e) => {
       e.stopPropagation(); e.preventDefault();
       if (b.dataset.o === 'rot') {
-        const s = objSel.s, ns = Object.assign({}, s, { r: ((s.r || 0) + 90) % 360 }); el.style.transform = 'rotate(' + ns.r + 'deg)';
+        const s = objSel.s, ns = Object.assign({}, s, { ro: ((s.ro || 0) + 90) % 360 }); el.style.transform = 'rotate(' + ns.ro + 'deg)';
         const L = items(p.k), k = L.indexOf(s); if (k < 0) return; L[k] = ns; el._s = ns; objSel.s = ns; commit({ pg: p.k, add: [ns], del: [s] }); return;
       }
       resizeTo(objSel.s.w * (b.dataset.o === 'bigger' ? 1.12 : 0.89));
@@ -443,7 +458,7 @@ export function mountPdf(root, o) {
       if (pinch && ptrs.size < 2) { const w = parseFloat(el.style.width) * 100; pinch = null; resizeTo(w); }
     };
   }
-  function deselectObj() { if (!objSel) return; const el = objSel.el; el.classList.remove('sel'); el.querySelectorAll('.pvobjbar,.pvrz').forEach((x) => x.remove()); el._down = el._move = el._up = null; objSel = null; }
+  function deselectObj() { if (!objSel) return; const el = objSel.el; el.classList.remove('sel'); el.querySelectorAll('.pvobjbar,.pvrz,.pvrot').forEach((x) => x.remove()); el._down = el._move = el._up = null; objSel = null; }
   document.addEventListener('pointerdown', (e) => { if (objSel && !e.target.closest('.pvobj')) deselectObj(); }, true);
 
   function shrinkImage(file) {
@@ -652,7 +667,7 @@ export function mountPdf(root, o) {
     const stick = !!s.b;
     const ta = document.createElement('textarea');
     ta.className = 'pvx' + (stick ? ' stick' : ''); if (stick) ta.style.background = s.b; ta.value = s.s || ''; ta.dir = 'auto'; ta.rows = 1; ta.spellcheck = false;
-    ta.style.left = (s.x / 100) + '%'; ta.style.top = (s.y / 100) + '%'; if (s.r) { ta.style.transform = 'rotate(' + s.r + 'deg)'; ta.style.transformOrigin = 'center'; }
+    ta.style.left = (s.x / 100) + '%'; ta.style.top = (s.y / 100) + '%'; if (s.ro) { ta.style.transform = 'rotate(' + s.ro + 'deg)'; ta.style.transformOrigin = 'center'; }
     ta.style.color = p.dark && !stick && DARK(s.c) ? '#f3f4f6' : s.c; ta.style.fontSize = 'calc(var(--pw) * ' + (s.z / 1000) + ')';
     fmtText(ta, s);
     if (sel && sel.pg === p.k && sel.set.has(s)) ta.classList.add('selx');
@@ -859,6 +874,7 @@ export function mountPdf(root, o) {
     if (b.dataset.act === 'ruler') { toggleRuler(); b.classList.toggle('on', !!RUL); return; }
     if (b.dataset.act === 'pages') { pagesPop(); return; }
     if (b.dataset.act === 'help') { helpPop(); return; }
+    if (b.dataset.act === 'ai') { closePop(); if (window.__gcAsk) window.__gcAsk(); else toast('مساعد Gemini يُحمَّل… أعد المحاولة بعد لحظة'); return; }
     if (b.dataset.act === 'undo') doUndo();
     else if (b.dataset.act === 'redo') doRedo();
     else if ('tool' in b.dataset) setTool(b.dataset.tool);
@@ -1148,7 +1164,7 @@ export function mountPdf(root, o) {
   function selectItems(p, got) {
     sel = { pg: p.k, items: got, set: new Set(got), off: [0, 0], scale: 1, box: selBounds(p, got) };
     const el = document.createElement('div'); el.className = 'pvselbox';
-    el.innerHTML = '<div class="pvselbar"><button type="button" data-sel="smaller" title="تصغير">−</button><button type="button" data-sel="bigger" title="تكبير">+</button><button type="button" data-sel="rot" title="تدوير 90°">⟳</button><button type="button" data-sel="color" title="تغيير اللون"><i class="pvselc"></i></button><button type="button" data-sel="copy"><span>نسخ</span></button><button type="button" data-sel="del">' + I.trash + '</button><button type="button" data-sel="more" title="المزيد">⋯</button></div>' +
+    el.innerHTML = '<div class="pvselbar"><button type="button" data-sel="smaller" title="تصغير">−</button><button type="button" data-sel="bigger" title="تكبير">+</button><button type="button" data-sel="color" title="تغيير اللون"><i class="pvselc"></i></button><button type="button" data-sel="copy"><span>نسخ</span></button><button type="button" data-sel="del">' + I.trash + '</button><button type="button" data-sel="more" title="المزيد">⋯</button></div>' +
       '<div class="pvselmore" hidden><button type="button" data-sm="cut">✂️ قصّ</button><button type="button" data-sm="thin">─ أرفع</button><button type="button" data-sm="thick">━ أسمك</button><button type="button" data-sm="front">⬆ إلى الأمام</button><button type="button" data-sm="back">⬇ إلى الخلف</button><button type="button" data-sm="fill">🪣 تعبئة الشكل</button><button type="button" data-sm="refine">✨ تنعيم الخط</button><button type="button" data-sm="math">🧮 حل العملية الحسابية</button><button type="button" data-sm="align">↔ ترتيب خط اليد في أسطر</button><button type="button" data-sm="ocr">✍️→Aa تحويل خط اليد إلى نص</button></div>' +
       '<div class="pvselcols" hidden>' + PEN_COLS.map((c) => '<button type="button" data-selc="' + c + '" style="background:' + c + '"></button>').join('') + '</div>' +
       '<span class="pvselrz" title="اسحب للتكبير والتصغير"></span><span class="pvselrot" title="اسحب للتدوير">⟳</span>';
@@ -1162,7 +1178,6 @@ export function mountPdf(root, o) {
       else if (k === 'smaller') scaleSel(0.88);
       else if (k === 'bigger') scaleSel(1.12);
       else if (k === 'color') { const c = el.querySelector('.pvselcols'); c.hidden = !c.hidden; }
-      else if (k === 'rot') rotateSel(90);
       else if (k === 'more') { const m = el.querySelector('.pvselmore'); m.hidden = !m.hidden; el.querySelector('.pvselcols').hidden = true; }
     });
     el.querySelector('.pvselcols').addEventListener('pointerdown', (e) => { stop(e); const b = e.target.closest('[data-selc]'); if (b) recolorSel(b.dataset.selc); });
@@ -1192,14 +1207,14 @@ export function mountPdf(root, o) {
     el.addEventListener('pointermove', (e) => {
       if (!g || !ptrs.has(e.pointerId) || !sel) return; ptrs.set(e.pointerId, [e.clientX, e.clientY]);
       if (g.kind === 'mv') { sel.off = [(e.clientX - g.x0) / g.r.width, (e.clientY - g.y0) / g.r.height]; placeSelBox(); moveTexts(); queue(p); }
-      else if (g.kind === 'rot') { let d = (Math.atan2(e.clientY - g.cy, e.clientX - g.cx) - g.a0) * 180 / Math.PI; d = Math.round(d); if (Math.abs(((d % 90) + 90) % 90) < 4 || Math.abs(((d % 90) + 90) % 90) > 86) d = Math.round(d / 90) * 90; sel.rot = d; el.style.transform = 'rotate(' + d + 'deg)'; queue(p); }
+      else if (g.kind === 'rot') { let d = (Math.atan2(e.clientY - g.cy, e.clientX - g.cx) - g.a0) * 180 / Math.PI; d = Math.round(((d % 360) + 540) % 360 - 180); sel.rot = d; el.style.transform = 'rotate(' + d + 'deg)'; el.dataset.deg = d + '°'; queue(p); }
       else if (g.kind === 'rz') { sel.scale = Math.max(0.2, Math.min(5, (e.clientX - g.ax) / g.w0)); placeSelBox(); queue(p); }
       else if (g.kind === 'pinch' && ptrs.size === 2) { const [a, b] = [...ptrs.values()]; sel.scale = Math.max(0.2, Math.min(5, Math.hypot(a[0] - b[0], a[1] - b[1]) / g.d0)); placeSelBox(); queue(p); }
     });
     const up = (e) => {
       ptrs.delete(e.pointerId); if (!g || !sel) { g = null; return; }
       if (g.kind === 'mv' && !ptrs.size) { g = null; finishMove(); }
-      else if (g.kind === 'rot' && !ptrs.size) { const d = sel.rot || 0; g = null; el.classList.remove('rotating'); if (((d % 360) + 360) % 360) rotateSel(d); else { sel.rot = 0; el.style.transform = ''; queue(p); } }
+      else if (g.kind === 'rot' && !ptrs.size) { const d = sel.rot || 0; g = null; el.classList.remove('rotating'); delete el.dataset.deg; if (((d % 360) + 360) % 360) rotateSel(d); else { sel.rot = 0; el.style.transform = ''; queue(p); } }
       else if ((g.kind === 'rz' && !ptrs.size) || (g.kind === 'pinch' && ptrs.size < 2)) { const f = sel.scale; sel.scale = 1; g = null; if (Math.abs(f - 1) > 0.01) scaleSel(f); else { placeSelBox(); queue(p); } }
     };
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
@@ -1212,7 +1227,7 @@ export function mountPdf(root, o) {
     if (s.pts) { const P = []; for (let k = 0; k < s.pts.length; k += 2) { const q = RT(s.pts[k], s.pts[k + 1]); P.push(q[0], q[1]); } return Object.assign({}, s, { pts: P }); }
     // نص أو صورة: ندوّر مركزه ثم نضيف زاوية للعنصر نفسه
     const p = byKey[sel.pg], b = itemBox(p, s), mx = (b[0] + b[2]) / 2, my = (b[1] + b[3]) / 2, q = RT(mx, my);
-    return Object.assign({}, s, { x: Math.round(s.x + q[0] - mx), y: Math.round(s.y + q[1] - my), r: (((s.r || 0) + deg) % 360 + 360) % 360 });
+    return Object.assign({}, s, { x: Math.round(s.x + q[0] - mx), y: Math.round(s.y + q[1] - my), ro: (((s.ro || 0) + deg) % 360 + 360) % 360 });
   }
   function pageRatio(p) { const r = p.cv.getBoundingClientRect(); return r.width ? r.height / r.width : 1; }
   function rotateSel(deg) {
@@ -1639,6 +1654,7 @@ export function mountPdf(root, o) {
     ['ruler', I.ruler, 'المسطرة', 'خطوط مستقيمة تماماً. حرّكها ودوّرها من طرفيها.', 1],
     ['pages', I.grid, 'كل الصفحات', 'صفحات مصغّرة، علامات ⭐، سلة المحذوفات، ونسخ سابقة من ملاحظاتك.', 1],
     ['find', I.search, 'البحث', 'ابحث في كل ما كتبته، حتى خط يدك.', 1],
+    ['ai', '✨', 'Gemini', 'اسأل Gemini عن الصفحة التي تقرؤها.', 1],
     ['laser', I.laser, 'مؤشر الليزر', 'للشرح لزملائك؛ يختفي وحده.', 1],
     ['', I.hand, 'اليد', 'التمرير. اضغط على خط أو صورة أو نص لتحديده وتحريكه وتكبيره.', 0]
   ];
@@ -1653,9 +1669,10 @@ export function mountPdf(root, o) {
     POP.innerHTML = '<div class="pvph"><b>؟ الأدوات</b><button type="button" class="pvx0" data-pop="close" aria-label="إغلاق">' + I.x + '</button></div>' +
       '<p class="pvhint" style="margin-top:0">أزل علامة ✓ لإخفاء أداة لا تستعملها من الشريط.</p><div class="pvhelpl">' +
       TOOLS_HELP.filter((t) => t[0] !== 'sel' || ch.pdfT).map((t) => '<label class="pvhi"><span class="ic">' + t[1] + '</span><span class="tx"><b>' + t[2] + '</b><small>' + t[3] + '</small></span>' + (t[4] ? '<input type="checkbox" data-hidet="' + t[0] + '"' + ((st.hideT || []).indexOf(t[0]) < 0 ? ' checked' : '') + '>' : '<i class="fix">دائماً</i>') + '</label>').join('') + '</div>' +
-      '<div class="pvseg"><button type="button" data-tour>▶ الجولة التعريفية</button></div>';
+      '<div class="pvseg"><button type="button" data-tour>▶ الجولة التعريفية</button><button type="button" data-rep>⚑ أبلغ عن خطأ في هذه الصفحة</button></div>';
     POP.dataset.for = 'help'; POP.hidden = false; POP.classList.add('wide');
     POP.querySelector('[data-tour]').addEventListener('click', () => { closePop(); tour(0); });
+    POP.querySelector('[data-rep]').addEventListener('click', () => { const pg = pages[cur]; closePop(); if (window.__gcReport) window.__gcReport({ kind: 'pdf', label: ch.ar + ' · PDF · ' + (pg && pg.li != null ? 'صفحة ' + (pg.li + 1) : 'صفحة ملاحظات'), href: '#/c/' + ch.id + '/pdf/' + (pg && pg.li != null ? pg.li + 1 : 1) }); });
   }
   const TOUR = [
     ['.pvb[data-tool="pen"]', '✏️ القلم: اكتب على الدرس. اضغطه مرة ثانية لاختيار النوع واللون والسُمك.'],
@@ -1698,7 +1715,7 @@ export function mountPdf(root, o) {
     });
     el.addEventListener('pointermove', (e) => {
       if (!g) return;
-      if (g.rot) { let a = Math.atan2(e.clientY - RUL.cy, e.clientX - RUL.cx) * 180 / Math.PI; if (e.target.classList.contains('l') || (g.side === 'l')) a += 180; a = ((a + 540) % 360) - 180; const sn = Math.round(a / 45) * 45; if (Math.abs(a - sn) < 4) a = sn; RUL.a = Math.round(a); }
+      if (g.rot) { let a = Math.atan2(e.clientY - RUL.cy, e.clientX - RUL.cx) * 180 / Math.PI; if (e.target.classList.contains('l') || (g.side === 'l')) a += 180; a = ((a + 540) % 360) - 180; RUL.a = Math.round(a); }
       else { RUL.cx = e.clientX - g.x; RUL.cy = e.clientY - g.y; }
       placeRuler();
     });

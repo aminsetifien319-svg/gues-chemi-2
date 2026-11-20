@@ -1561,3 +1561,42 @@ body.pvfull .pvback,body.pvfull .pvttl{display:none}
 .tpcard .txt{display:none;color:var(--ink);font-weight:500;font-size:14.5px;line-height:1.7}
 .tpcard.open{background:var(--hov,#f6f9fc);outline:2px dashed #f59e0b}
 .tpcard.open .cov{display:none}.tpcard.open .txt{display:block}
+.pvrot{position:absolute;left:-14px;bottom:-14px;width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:#16a34a;color:#fff;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:grab;touch-action:none;font:800 14px/1 Outfit,sans-serif}
+.pvrot::after{content:"";position:absolute;inset:-10px}
+.pvobj[data-deg]::before,.pvselbox[data-deg]::before{content:attr(data-deg);position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:5;padding:4px 10px;border-radius:999px;background:#16a34a;color:#fff;font:800 15px Outfit,sans-serif;pointer-events:none}
+/* المقابض داخل العنصر حتى لا تُقصّ عند حافة الصفحة */
+.pvobj .pvrot{left:4px;bottom:4px}
+.pvobj .pvrz{right:4px;bottom:4px}
+.pvselbox .pvselrot{left:4px;bottom:4px}
+.pvselbox .pvselrz{right:4px;bottom:4px}
+/* v87: زر Gemini صغير، يُسحب، ويختفي أثناء التمرير */
+.aifab{position:fixed;left:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));width:44px;height:44px;padding:0;justify-content:center;border-radius:50%;opacity:.88;box-shadow:0 4px 14px rgba(79,70,229,.35);touch-action:none;transition:transform .25s,opacity .25s}
+.aifab b{display:none}
+.aifab span{font-size:20px}
+.aifab:hover{opacity:1}
+.aifab.drag{transition:none;opacity:1;transform:scale(1.1)}
+.aifab.away{opacity:0;transform:scale(.6);pointer-events:none}
+body.pdfmode .aifab{display:none}
+.pvai{font-size:19px!important}
+/* بلاغات الأخطاء */
+.btn.rep{opacity:.8}
+.repline{text-align:center;margin:18px 0 6px}
+.repbox{position:fixed;inset:0;z-index:95;display:grid;place-items:center;padding:16px;background:rgba(2,6,23,.55)}
+.repcard{width:min(440px,100%);background:var(--card);color:var(--ink);border-radius:18px;padding:16px 18px;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.rephead{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:17px}
+.rephead .aix{background:var(--bg2,#eef2f7);color:var(--ink);border:0;border-radius:50%;width:32px;height:32px;cursor:pointer}
+.repcats{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}
+.repcats .chip{border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:6px 12px;font:600 13px Cairo,sans-serif;cursor:pointer}
+.repcats .chip.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.repcard textarea{width:100%;resize:vertical;font:500 14px Cairo,sans-serif}
+.repmsg{color:#dc2626;min-height:1em}
+/* الإدارة: البلاغات والإحصائيات */
+.list.reps li.rep{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.list.reps li.rep.done{opacity:.55}
+.list.reps .repm{margin:4px 0;white-space:pre-wrap}
+.list.reps .pill{background:#eef2ff;color:#3730a3;border-radius:999px;padding:1px 8px;font-size:11px}
+.stgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}
+.stgrid div{display:flex;flex-direction:column;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.stgrid b{font-size:26px}.stgrid small{color:var(--mut)}
+#stats h3{margin:16px 0 8px;font-size:15.5px}
+.qtx{color:var(--mut);margin-top:2px}

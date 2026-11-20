@@ -1,9 +1,9 @@
 // لوحة الإدارة: قبول الطلبة، إدارة القائمة، ورفع المحتوى (الفهرس + حزم الصور) إلى Firestore.
 import {
   watchUser, signIn, signOutUser, isAdminUser, listRequests, listAllowed,
-  approve, reject, removeAllowed, addAllowed, authAgeHours, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, loadSubjects, saveSubjects, DEFAULT_SUBJECTS, configMissing, YEAR, YEAR_AR
-} from './firebase.js?v=85';
-import { mountEditor } from './editor.js?v=85';
+  approve, reject, removeAllowed, addAllowed, authAgeHours, uploadImage, uploadManifest, listProgress, loadManifest, listDevices, resetDevices, loadSubjects, saveSubjects, DEFAULT_SUBJECTS, configMissing, YEAR, YEAR_AR, listReports, setReportStatus, delReport, getImage
+} from './firebase.js?v=88';
+import { mountEditor } from './editor.js?v=88';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const box = $('#box');
@@ -71,7 +71,61 @@ function fmtDate(d) {
   if (mins < 1440) return 'منذ ' + Math.round(mins / 60) + ' س';
   return d.toLocaleDateString('fr-DZ');
 }
-let TOT = null;
+let TOT = null, MSALL = null, repFilter = 'new';
+const siteLink = (h) => 'index.html' + (YEAR === 2 ? '?y=2' : '') + (h || '');
+/* ---------- بلاغات الطلبة ---------- */
+function reportsCard(reps) {
+  const nNew = reps.filter((r) => r.st !== 'done').length;
+  const L = reps.filter((r) => repFilter === 'all' || (repFilter === 'new' ? r.st !== 'done' : r.st === 'done'));
+  const kindAr = { q: 'سؤال', page: 'صفحة درس', pdf: 'PDF' };
+  return '<div class="card" id="reports"><h2>⚑ بلاغات الطلبة عن الأخطاء <small>' + nNew + ' جديدة</small></h2>' +
+    '<p class="row-form">' + [['new', 'الجديدة'], ['done', 'المعالَجة'], ['all', 'الكل']].map((f) => '<button type="button" class="btn sm' + (repFilter === f[0] ? ' pri' : '') + '" data-a="repf" data-f="' + f[0] + '">' + f[1] + '</button>').join(' ') + '</p>' +
+    (L.length ? '<ul class="list reps">' + L.map((r) => '<li class="rep' + (r.st === 'done' ? ' done' : '') + '"><div><b>' + esc(r.cat || 'بلاغ') + '</b> <small class="pill">' + esc(kindAr[r.kind] || r.kind || '') + '</small><br><a href="' + esc(siteLink(r.href)) + '" target="_blank" rel="noopener">' + esc(r.label || r.href || '') + ' ↗</a>' +
+      (r.msg ? '<p class="repm">' + esc(r.msg) + '</p>' : '') + '<small class="lat">' + esc(r.email || '') + ' · ' + fmtDate(r.at) + '</small></div>' +
+      '<span class="acts">' + (r.st !== 'done' ? '<button type="button" class="btn sm pri" data-a="repdone" data-id="' + esc(r.id) + '">✓ صُحّح</button>' : '<button type="button" class="btn sm" data-a="repnew" data-id="' + esc(r.id) + '">↺ أعده جديداً</button>') + '<button type="button" class="btn sm" data-a="repdel" data-id="' + esc(r.id) + '" data-label="🗑">🗑</button></span></li>').join('') + '</ul>'
+      : '<p class="small">' + (repFilter === 'new' ? 'لا توجد بلاغات جديدة 👍' : 'لا شيء هنا.') + '</p>') + '</div>';
+}
+/* ---------- إحصائيات: النشاط، أصعب الأسئلة، الدروس الأكثر قراءة ---------- */
+let QTXT = {};
+function statsCard(allowed, progress) {
+  if (!MSALL) return '';
+  const okEmails = new Set(allowed.map((a) => a.email)), now0 = Date.now();
+  const P = progress.filter((x) => okEmails.has(x.email)).map((x) => { let p = null; try { p = JSON.parse(x.json); } catch (e) {} return { at: x.at, p: p }; }).filter((x) => x.p);
+  const act1 = P.filter((x) => x.at && now0 - x.at.getTime() < 864e5).length, act7 = P.filter((x) => x.at && now0 - x.at.getTime() < 7 * 864e5).length;
+  // خريطة: مفتاح السؤال ← (المادة، الشابتر، النوع، الرقم) · رقم الصفحة ← الشابتر
+  const Q = {}, PG = {};
+  MSALL.forEach(([sj, m]) => m.chapters.forEach((ch) => {
+    ch.qcm.forEach((set) => set.q.forEach((q, i) => { Q['c' + ch.id + set.key[0] + q.n] = { sj: sj, ch: ch, set: set.key, n: q.n, i: i, open: !q.ans }; }));
+    ch.sections.forEach((s) => s.pages.forEach((pg) => { PG[pg.n] = ch; })); ch.revision.forEach((pg) => { PG[pg.n] = ch; });
+  }));
+  const qs = {}, rd = {};
+  P.forEach(({ p }) => {
+    Object.keys(p.a || {}).forEach((k) => { const a = p.a[k], q = Q[k]; if (!q || !a || a.d || !a.s || a.open || q.open) return; const o = qs[k] || (qs[k] = { n: 0, bad: 0 }); o.n++; if (!a.ok) o.bad++; });
+    const seen = new Set(); Object.keys(p.r || {}).forEach((n) => { const ch = PG[n] || (n[0] === 'f' || n[0] === 'i' ? null : null); if (ch) seen.add(ch); });
+    seen.forEach((ch) => { const o = rd[ch.id] || (rd[ch.id] = { ch: ch, students: 0, pages: 0 }); o.students++; });
+    Object.keys(p.r || {}).forEach((n) => { const ch = PG[n]; if (ch) rd[ch.id].pages++; });
+  });
+  const hard = Object.keys(qs).filter((k) => qs[k].n >= 3).sort((a, b) => qs[b].bad / qs[b].n - qs[a].bad / qs[a].n || qs[b].n - qs[a].n).slice(0, 15);
+  const top = Object.values(rd).sort((a, b) => b.students - a.students || b.pages - a.pages).slice(0, 10);
+  const kindAr = { official: 'رسمي', proposed: 'مقترح' };
+  const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
+  return '<div class="card" id="stats"><h2>📊 إحصائيات <small>Stats</small></h2>' +
+    '<div class="stgrid"><div><b class="lat">' + act1 + '</b><small>نشِط اليوم</small></div><div><b class="lat">' + act7 + '</b><small>نشِط هذا الأسبوع</small></div><div><b class="lat">' + allowed.length + '</b><small>طالب مقبول</small></div><div><b class="lat">' + Object.keys(qs).length + '</b><small>سؤال أجاب عنه الطلبة</small></div></div>' +
+    '<h3>❌ أصعب الأسئلة <small>(أجاب عنها 3 طلبة أو أكثر)</small></h3>' +
+    (hard.length ? '<div class="tscroll"><table class="ptab"><thead><tr><th>السؤال</th><th>أخطأ</th><th>من</th><th>نسبة الخطأ</th></tr></thead><tbody>' + hard.map((k) => { const q = Q[k], o = qs[k]; const href = '#/c/' + q.ch.id + '/q/' + q.set + '/' + (q.i + 1); return '<tr><td><a href="' + esc(siteLink(href)) + '" target="_blank" rel="noopener">' + esc(q.sj.ar) + ' · CH ' + q.ch.id + ' · ' + kindAr[q.set] + ' س' + q.n + ' ↗</a><div class="small qtx" data-qk="' + esc(k) + '">' + esc(QTXT[k] || '') + '</div></td><td class="lat">' + o.bad + '</td><td class="lat">' + o.n + '</td><td><span class="lat ' + (pct(o.bad, o.n) >= 50 ? 'koc' : '') + '">' + pct(o.bad, o.n) + '%</span><span class="pbar"><i style="width:' + pct(o.bad, o.n) + '%;background:#ef4444"></i></span></td></tr>'; }).join('') + '</tbody></table></div><p class="small">هذه الأسئلة تحتاج شرحاً أكثر، أو قد يكون جوابها في الملف خاطئاً: تحقّق منها.</p>' : '<p class="small">لا توجد بيانات كافية بعد.</p>') +
+    '<h3>📖 الدروس الأكثر قراءة</h3>' +
+    (top.length ? '<div class="tscroll"><table class="ptab"><thead><tr><th>الدرس</th><th>عدد الطلبة</th><th>صفحات مقروءة</th></tr></thead><tbody>' + top.map((o) => '<tr><td>CH ' + o.ch.id + ' · ' + esc(o.ch.ar) + '</td><td class="lat">' + o.students + '<span class="pbar"><i style="width:' + pct(o.students, P.length) + '%"></i></span></td><td class="lat">' + o.pages + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="small">لا توجد بيانات بعد.</p>') + '</div>';
+}
+// نص أصعب الأسئلة (يُحمَّل بعد العرض)
+async function fillQText() {
+  const els = [...document.querySelectorAll('.qtx[data-qk]')].filter((e) => !e.textContent); if (!els.length || !MSALL) return;
+  const byCh = {}; MSALL.forEach(([, m]) => m.chapters.forEach((ch) => { byCh[ch.id] = ch; }));
+  const need = {}; els.forEach((e) => { const cid = (e.dataset.qk.match(/^c(\d+)/) || [])[1]; if (cid && byCh[cid] && byCh[cid].text) need[cid] = byCh[cid]; });
+  await Promise.all(Object.values(need).map(async (ch) => {
+    try { const T = JSON.parse(await getImage(ch.text)); Object.keys(T.q || {}).forEach((k) => { const x = T.q[k]; QTXT[k] = String((x && (x.en || x.ar)) || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140); }); } catch (e) {}
+  }));
+  els.forEach((e) => { if (e.isConnected) e.textContent = QTXT[e.dataset.qk] || ''; });
+}
 function progressCard(allowed, progress, devices) {
   const map = {}; progress.forEach((x) => { map[x.email] = x; });
   const dev = {}; (devices || []).forEach((d) => { dev[d.email] = d; });
@@ -93,7 +147,8 @@ function progressCard(allowed, progress, devices) {
 }
 
 async function refresh() {
-  const [req, allowed, progress, devices] = await Promise.all([listRequests(), listAllowed(), listProgress().catch(() => []), listDevices().catch(() => [])]);
+  const [req, allowed, progress, devices, reps] = await Promise.all([listRequests(), listAllowed(), listProgress().catch(() => []), listDevices().catch(() => []), listReports().catch(() => [])]);
+  if (!MSALL) { try { const SL = await loadSubjects(); MSALL = (await Promise.all(SL.map(async (x) => [x, await loadManifest(x.doc).catch(() => null)]))).filter((x) => x[1] && x[1].chapters); } catch (e) {} }
   if (!TOT) {
     try {
       const SL = await loadSubjects(); const ms = (await Promise.all(SL.map((x) => loadManifest(x.doc).catch(() => null)))).filter((x) => x && x.chapters);
@@ -117,16 +172,18 @@ async function refresh() {
     (status ? '<div class="card"><h2>حالة المحتوى على الخادم <small>Live content</small></h2><div class="tscroll"><table class="ptab"><thead><tr><th>المادة</th><th>نسخة المحتوى</th><th>النص المكتوب</th></tr></thead><tbody>' + status + '</tbody></table></div><p class="small">إن ظهر «✗ نص قديم» فالمادة لم تُرفع بالملفات الجديدة بعد.</p></div>' : '') +
     '<div class="card"><h2>طلبات الوصول · ' + YEAR_AR + ' <small>' + req.length + ' pending</small></h2>' +
     (req.length ? '<ul class="list" id="reqs">' + req.map((r) => li(r, 'req')).join('') + '</ul>' : '<p class="small">لا توجد طلبات الآن.</p>') + '</div>' +
+    reportsCard(reps) +
     '<div class="card"><h2>الطلبة المقبولون · ' + YEAR_AR + ' <small>' + allowed.length + ' students</small></h2>' +
     (allowed.length ? '<p class="row-form"><button type="button" class="btn" id="copymails" data-mails="' + esc(allowed.map((r) => r.email).join(', ')) + '">📋 نسخ إيميلات الطلبة المقبولين (لمشاركة فيديوهات Drive)</button></p>' : '') +
     '<div class="row-form"><input class="input" id="newmail" type="email" placeholder="student@gmail.com" autocomplete="off" dir="ltr"><button type="button" class="btn pri" id="add">إضافة بريد</button></div>' +
     (allowed.length ? '<ul class="list" id="alw">' + allowed.map((r) => li(r, 'alw')).join('') + '</ul>' : '<p class="small">لا يوجد طلبة مقبولون بعد.</p>') + '</div>' +
-    progressCard(allowed, progress, devices) +
+    progressCard(allowed, progress, devices) + statsCard(allowed, progress) +
     '<div class="card"><h2>محتوى الموقع · ' + YEAR_AR + ' <small>Content</small></h2>' +
     '<p class="small">اختر <b>كل</b> ملفات المحتوى معاً: <b class="lat">manifest.json</b> وملفات <b class="lat">pack-….json</b> (7 ملفات). لإضافة بطاقات المراجعة وحدها اختر الملف <b class="lat">pack-cards.json</b> فقط. <b>للكيمياء العضوية</b> اختر الملفات الثلاثة: <b class="lat">manifest_org.json</b> و<b class="lat">pack-org11.json</b> و<b class="lat">pack-org12.json</b>. تعديلاتك من المحرّر تبقى محفوظة عند إعادة الرفع. ملاحظة: الصور التي رُفعت سابقاً من هذا المتصفح تُتخطّى تلقائياً. الرفع يستغرق بضع دقائق، وإن انقطع أعد الضغط على «رفع المحتوى» من نفس المتصفح وسيكمل من حيث توقف.</p>' +
     '<div class="row-form"><input class="input" id="file" type="file" accept="application/json,.json" multiple><button type="button" class="btn pri" id="upload">رفع المحتوى</button></div>' +
     '<div class="prog-up" id="up" hidden><span class="pbar"><i id="upbar" style="width:0%"></i></span><p class="small" id="uptxt"></p></div>' +
     '<p id="msg" class="' + (note.indexOf('✓') === 0 ? 'okmsg' : 'err') + '" role="status">' + esc(note) + '</p></div>';
+  fillQText();
 }
 
 async function readJson(f) {
@@ -254,6 +311,15 @@ function armIdle() {
 ['click', 'keydown', 'input', 'pointermove'].forEach((ev) => document.addEventListener(ev, () => { if (me) armIdle(); }, { passive: true }));
 document.addEventListener('click', async (e) => {
   const t = e.target;
+  const rb = t.closest && t.closest('[data-a^="rep"]');
+  if (rb) {
+    const a = rb.dataset.a, id = rb.dataset.id;
+    if (a === 'repf') { repFilter = rb.dataset.f; await refresh(); return; }
+    if (a === 'repdel' && rb.dataset.sure !== '1') { rb.dataset.sure = '1'; rb.textContent = 'تأكيد الحذف؟'; return; }
+    rb.disabled = true;
+    try { if (a === 'repdone') await setReportStatus(id, 'done'); else if (a === 'repnew') await setReportStatus(id, 'new'); else if (a === 'repdel') await delReport(id); } catch (err) { note = err.message || String(err); }
+    await refresh(); return;
+  }
   if (t.id === 'relogin') { try { await signOutUser(); await signIn(); } catch (err) { gate('<h1>تعذّر الدخول</h1><p class="err">' + esc(err.message || err) + '</p>'); } return; }
   if (t.id === 'out') { await signOutUser(); return; }
   if (t.id === 'copylink') { const v = t.dataset.link || ''; try { await navigator.clipboard.writeText(v); } catch (err) {} t.textContent = '✓ نُسخ'; return; }

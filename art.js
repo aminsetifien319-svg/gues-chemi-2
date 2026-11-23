@@ -44,6 +44,7 @@ export const THEMES = {
   bio: { a: '#22a35a', b: '#0f5a36', c: '#082a1c', name: 'البيولوجيا الخلوية' },
   stat: { a: '#f08a1c', b: '#8a3f05', c: '#2c1606', name: 'الإحصاء الحيوي' },
   ana: { a: '#e0464e', b: '#7a1420', c: '#2e080d', name: 'التشريح' },
+  gnt: { a: '#f0963f', b: '#4b2f9a', c: '#160f36', name: 'علم الوراثة' },
   bph: { a: '#14b8c4', b: '#0b5f6b', c: '#062a30', name: 'الفيزياء الحيوية' },
   hist: { a: '#c8903a', b: '#6b4414', c: '#2a1a07', name: 'تاريخ الصيدلة' },
 };
@@ -56,6 +57,7 @@ const ICONS = {
   bio: '<path d="M16 3c7 0 13 5.5 13 13s-6 13-13 13S3 23 3 16 9 3 16 3z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="14" cy="14" r="5" fill="currentColor" opacity=".85"/><circle cx="22" cy="21" r="1.6" fill="currentColor"/><circle cx="9" cy="22" r="1.3" fill="currentColor"/><path d="M20 9c2 0 4 1 4 3" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>',
   stat: '<path d="M4 28h24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="6" y="18" width="4" height="10" rx="1" fill="currentColor" opacity=".6"/><rect x="12" y="11" width="4" height="17" rx="1" fill="currentColor" opacity=".8"/><rect x="18" y="14" width="4" height="14" rx="1" fill="currentColor" opacity=".7"/><rect x="24" y="21" width="4" height="7" rx="1" fill="currentColor" opacity=".55"/><path d="M4 22C9 22 10 6 16 6s7 16 12 16" fill="none" stroke="currentColor" stroke-width="1.8"/>',
   hist: '<path d="M9 5h14v3H9zM11 8v13M21 8v13M7 21h18v3H7zM5 24h22v3H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M16 10v8M13 14h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  gnt: '<path d="M10 4c0 8 12 8 12 16s-12 8-12 8M22 4c0 8-12 8-12 16s12 8 12 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 9h8M11 16h10M12 23h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".75"/>',
   bph: '<path d="M3 16c3-7 6-7 9 0s6 7 9 0 5-6 8-2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M16 4v5M12 6h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="9" cy="25" r="2" fill="currentColor"/><circle cx="16" cy="26" r="1.5" fill="currentColor" opacity=".7"/><circle cx="23" cy="25" r="2" fill="currentColor"/>',
   ana: '<circle cx="16" cy="6" r="3.4" fill="currentColor"/><path d="M16 10v10M9 14l7-2 7 2M16 20l-5 9M16 20l5 9" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>',
 };
@@ -68,6 +70,7 @@ const MOTIF = {
   bio: '<g fill="none" stroke="#fff" stroke-width="1.2"><path d="M40 14c15 0 26 11 26 26S55 66 40 66 14 55 14 40s11-26 26-26z"/><circle cx="36" cy="36" r="8"/><path d="M96 80c0 10 14 10 14 20s-14 10-14 20M110 80c0 10-14 10-14 20s14 10 14 20"/><path d="M98 88h10M98 112h10"/></g><circle cx="52" cy="50" r="2" fill="#fff"/>',
   stat: '<g fill="none" stroke="#fff" stroke-width="1.2"><path d="M10 60c12 0 14-40 25-40s13 40 25 40"/><path d="M10 60h50"/><path d="M80 120v-20h8v20M92 120v-34h8v34M104 120v-26h8v26"/></g><text x="80" y="40" font-family="Arial" font-size="15" fill="#fff">x̄ σ</text>',
   hist: '<g fill="none" stroke="#fff" stroke-width="1.3"><path d="M20 40h40M24 40v-14M56 40v-14M24 26h32l-16-10z"/><path d="M20 40v6h40v-6"/><path d="M92 100c0-14 22-14 22 0 0 12-22 12-22 0zM103 86v-8M97 78h12"/></g>',
+  gnt: '<g fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round"><path d="M20 10c0 20 30 20 30 40s-30 20-30 40M50 10c0 20-30 20-30 40s30 20 30 40"/><path d="M24 22h22M22 50h26M24 78h22" opacity=".7"/><path d="M92 30l18 30M110 30l-18 30M100 70l14 24M114 70l-14 24"/></g><circle cx="101" cy="45" r="3" fill="#fff"/><circle cx="107" cy="82" r="2.5" fill="#fff"/>',
   bph: '<g fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round"><path d="M10 40c10-14 20-14 30 0s20 14 30 0"/><path d="M96 14v52M104 14v52" stroke-dasharray="3 4"/><path d="M20 110h30M20 118h30"/></g><circle cx="86" cy="30" r="3" fill="#fff"/><circle cx="114" cy="48" r="2.5" fill="#fff"/><circle cx="84" cy="56" r="2" fill="#fff"/><text x="70" y="112" font-family="Arial" font-size="14" fill="#fff">M·L·T</text>',
   ana: '<g fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round"><path d="M22 30c-6-6 2-14 8-8l30 30c6-6 14 2 8 8s-2 6-8 8-14-2-8-8L22 30c-6 6-14-2-8-8s2-6 8-8z" transform="translate(-4 -4) scale(.85)"/><path d="M100 70c-9 0-14 9-9 17 4 6 9 8 9 8s5-2 9-8c5-8 0-17-9-17z"/><path d="M100 72v10"/></g>',
 };

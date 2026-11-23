@@ -3,10 +3,10 @@ import {
   watchUser, signIn, signOutUser, getAccess, sendRequest, loadManifest, getImage,
   loadProgress, saveProgress, getDevices, addDevice, watchManifest, loadSubjects, configMissing,
   YEAR, YEAR_EXPLICIT, YEAR_AR, YEAR_EN, hasYear, switchYear, loadNotes, saveNotes, loadMedia, saveMedia, listChats, saveChat, delChat, cacheDoc, sendReport
-} from './firebase.js?v=89';
-import { mountPdf } from './pdfv.js?v=89';
-import { fmt, typeset } from './rich.js?v=89';
-import { theme, subjIcon, subjMotif, chArt } from './art.js?v=89';
+} from './firebase.js?v=90';
+import { mountPdf } from './pdfv.js?v=90';
+import { fmt, typeset } from './rich.js?v=90';
+import { theme, subjIcon, subjMotif, chArt } from './art.js?v=90';
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
@@ -224,7 +224,7 @@ window.addEventListener('appinstalled', () => { installEvt = null; renderUser();
 if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }
 
 /* ---------- التحديث التلقائي: كل طالب يحصل على آخر نسخة من الموقع ---------- */
-const APP_V = 89;
+const APP_V = 90;
 async function checkUpdate(boot) {
   let j = null;
   try { const r = await fetch('version.json?t=' + now(), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch (e) { return; }
@@ -804,7 +804,7 @@ function home() {
     '<div class="hero' + (M.hero ? ' hcov' : '') + '">' + (M.hero ? bgDiv(M.hero, 'hero-bg') : '<div class="hero-art">' + subjIcon(CURS, 'hico') + '</div>') + '<div class="hero-in">' + subjTabs('hero') + '<p class="kick lat">' + subjIcon(CURS, 'kico') + esc(subj().en) + ' · ' + YEAR_EN + ' Pharmacy</p>' +
     '<h1>' + (first ? 'أهلاً ' + esc(first) + '، ' : '') + esc(subj().ar) + ' كاملة، شابيطر بشابيطر</h1>' +
     '<p class="lead">اقرأ كل درس مكتوباً، حلّ كيسيام الامتحانات والكيسيام المقترح، راجع أخطاءك كل يوم، ثم اختبر نفسك في امتحان تجريبي بالوقت.</p>' +
-    '<form class="hsearch" data-search><input type="search" name="q" placeholder="ابحث في الدروس والأسئلة… مثلاً ' + ({ org: 'hybridization أو alkene', bio: 'Gram أو virus', stat: 'median أو variance', ana: 'sagittal أو تشريح', hist: 'Hippocrates أو جالينوس', bph: 'dimension أو dyne' }[CURS] || 'Slater أو هوند') + '" aria-label="بحث" autocomplete="off"><button type="submit" class="btn pri">بحث</button></form>' +
+    '<form class="hsearch" data-search><input type="search" name="q" placeholder="ابحث في الدروس والأسئلة… مثلاً ' + ({ org: 'hybridization أو alkene', bio: 'Gram أو virus', stat: 'median أو variance', ana: 'sagittal أو تشريح', hist: 'Hippocrates أو جالينوس', bph: 'dimension أو dyne', gnt: 'mitosis أو crossing-over' }[CURS] || 'Slater أو هوند') + '" aria-label="بحث" autocomplete="off"><button type="submit" class="btn pri">بحث</button></form>' +
     '<div class="kpis"><span><b class="lat">' + nOff + '</b>كيسيام رسمي محلول</span><span><b class="lat">' + nPro + '</b>كيسيام مقترح</span><span><b class="lat">' + tp + '</b>صفحة دروس</span><span><b class="lat">' + M.chapters.length + '</b>شابيطرات</span></div>' +
     '<p class="acts">' + (prog.last ? '<a class="btn pri" href="' + esc(prog.last) + '">تابع من حيث توقفت ←</a>' : '<a class="btn pri" href="#/c/' + M.chapters[0].id + '">ابدأ بالشابيطر الأول ←</a>') + '<a class="btn ghost" href="#/exam">امتحان تجريبي</a></p>' +
     '</div></div>' +
@@ -1001,7 +1001,7 @@ window.addEventListener('online', netBar); window.addEventListener('offline', ne
 let aiOn = false;
 function startAI() {
   if (aiOn) return; aiOn = true;
-  import('./ai.js?v=89').then((m) => m.mountAI({
+  import('./ai.js?v=90').then((m) => m.mountAI({
     email: () => (me && me.email) || '',
     getCtx: aiCtx,
     listChats: () => listChats(me.email), saveChat: (id, j) => saveChat(me.email, id, j), delChat: (id) => delChat(me.email, id)

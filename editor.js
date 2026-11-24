@@ -257,14 +257,14 @@ async function save() {
       } else {
         const Q = T.q[CUR.key];
         const ans = $$('[data-ans]').filter((x) => x.checked).map((x) => x.dataset.ans).join('');
-        if (!ans) throw new Error('اختر إجابة صحيحة واحدة على الأقل.');
+        if (!ans && CUR.q.ans !== '0') throw new Error('اختر إجابة صحيحة واحدة على الأقل.');
         Q.en = clean($('#q_en')); Q.ar = clean($('#q_ar')); Q.s = clean($('#q_s'));
         CUR.q.opts.split('').forEach((L) => {
           let o = Q.opts.find((x) => x.L === L);
           if (!o) { o = { L: L, en: '', ar: '', fig: '' }; Q.opts.push(o); }
           o.en = clean($('#o_en_' + L)); o.ar = clean($('#o_ar_' + L));
         });
-        if (ans !== CUR.q.ans) ansFix = ans;
+        if (ans && ans !== CUR.q.ans) ansFix = ans;
       }
       const id = 'text_c' + CH.id + '_e' + stamp();
       await uploadImage(id, JSON.stringify(T));

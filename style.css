@@ -1600,3 +1600,11 @@ body.pdfmode .aifab{display:none}
 .stgrid b{font-size:26px}.stgrid small{color:var(--mut)}
 #stats h3{margin:16px 0 8px;font-size:15.5px}
 .qtx{color:var(--mut);margin-top:2px}
+
+/* خيار «لا يوجد جواب» */
+.orow.none .ol{background:var(--soft);color:var(--ink2)}
+.orow.none.on .ol{background:var(--cyan2);color:#fff}
+.opt.none{width:auto;padding:0 18px;font-size:15px}
+.opts .opt.none{max-width:none}
+.nonenote{margin-top:10px;padding:10px 14px;border-radius:12px;background:#fff6dd;color:#6b4a00;font-size:13.5px;line-height:1.8;border:1px dashed #e0b84a}
+html[data-theme="dark"] .nonenote{background:#3a2b0e;color:#f1c66d;border-color:#7a5a1a}

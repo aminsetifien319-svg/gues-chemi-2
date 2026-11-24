@@ -1062,6 +1062,19 @@ function page(ch, i) {
 /* =================================================================
    شاشة السؤال الموحّدة (تدريب · مراجعة · امتحان · تصحيح)
    ================================================================= */
+// سؤال كل خياراته خاطئة في PDF (التصحيح «—»): نضيف خيار «لا يوجد جواب» ورمزه 0
+const NONE = '0';
+const ansLbl = (a) => a === NONE ? 'لا يوجد جواب' : a;
+const NONE_NOTE = '<div class="nonenote" dir="rtl"><b>ℹ️ ملاحظة:</b> في هذا السؤال كل الخيارات خاطئة (التصحيح في PDF: «—»)، وأضفنا خيار «لا يوجد جواب» للتدريب فقط. <b>في الاختبار الحقيقي لا يوجد هذا الخيار: اترك خانة السؤال فارغة ولا تشطب أي شيء.</b></div>';
+function noneRow(q, sel, r, locked, letters) {
+  if (q.ans !== NONE) return '';
+  let c = letters ? 'opt none' : 'orow none';
+  if (sel.indexOf(NONE) >= 0) c += ' on';
+  if (r) c += r.s.indexOf(NONE) >= 0 ? ' good' : ' miss';
+  const dis = locked ? ' disabled' : '', pr = ' aria-pressed="' + (sel.indexOf(NONE) >= 0) + '"';
+  if (letters) return '<button type="button" class="' + c + '" data-opt="' + NONE + '"' + dis + pr + '><b>لا يوجد جواب</b></button>';
+  return '<button type="button" class="' + c + '" data-opt="' + NONE + '"' + dis + pr + '><b class="ol lat">∅</b><span class="ot"><span class="oa" dir="rtl"><b>لا يوجد جواب</b> · None of the options is correct</span></span>' + (r && r.s.indexOf(NONE) >= 0 ? '<i class="om">✓</i>' : '') + '</button>';
+}
 function optRows(key, q, T, sel, r, locked) {
   const opts = q.opts.split('').map((L) => {
     const o = T && T.opts.find((x) => x.L === L);
@@ -1072,7 +1085,7 @@ function optRows(key, q, T, sel, r, locked) {
     const mark = r && q.ans ? (q.ans.indexOf(L) >= 0 ? '<i class="om">✓</i>' : r.s.indexOf(L) >= 0 ? '<i class="om">✗</i>' : '') : '';
     return '<button type="button" class="' + c + '" data-opt="' + L + '"' + (locked ? ' disabled' : '') + ' aria-pressed="' + (sel.indexOf(L) >= 0) + '"><b class="ol lat">' + L + '</b>' + body + mark + '</button>';
   }).join('');
-  return '<div class="olist" dir="ltr">' + opts + '</div>';
+  return '<div class="olist" dir="ltr">' + opts + noneRow(q, sel, r, locked, false) + '</div>' + (q.ans === NONE ? NONE_NOTE : '');
 }
 function letterRow(q, sel, r, locked) {
   return '<div class="opts">' + q.opts.split('').map((L) => {
@@ -1080,7 +1093,7 @@ function letterRow(q, sel, r, locked) {
     if (sel.indexOf(L) >= 0) c += ' on';
     if (r && q.ans) { const good = q.ans.indexOf(L) >= 0, picked = r.s.indexOf(L) >= 0; c += good && picked ? ' good' : good ? ' miss' : picked ? ' bad' : ' dim'; }
     return '<button type="button" class="' + c + '" data-opt="' + L + '"' + (locked ? ' disabled' : '') + ' aria-pressed="' + (sel.indexOf(L) >= 0) + '"><b class="lat">' + L + '</b></button>';
-  }).join('') + '</div>';
+  }).join('') + noneRow(q, sel, r, locked, true) + '</div>' + (q.ans === NONE ? NONE_NOTE : '');
 }
 function qscreen(ctx) {
   CUR = ctx;
@@ -1095,7 +1108,7 @@ function qscreen(ctx) {
   const chips = keys.map((k, j) => { const st = ctx.chip(k, j); const dis = ctx.chipDisabled && ctx.chipDisabled(j); return dis ? '<span class="qc dis' + (j === i ? ' cur' : '') + '"><span class="lat">' + (j + 1) + '</span></span>' : '<a class="qc' + (j === i ? ' cur' : '') + (st ? ' ' + st : '') + '" href="' + ctx.href(j) + '" aria-label="سؤال ' + (j + 1) + '"><span class="lat">' + (ctx.num ? ctx.num(k, j) : j + 1) + '</span></a>'; }).join('');
   const open = !q.ans;
   const lessonLink = q.p ? '<a href="#/c/' + it.ch.id + '/p/' + q.p + '">افتح الدرس ←</a>' : '<a href="#/c/' + it.ch.id + '">افتح الدروس ←</a>';
-  const verdict = r && open ? '<div class="verdict open" role="status"><b>📖 هذا السؤال بلا تصحيح في الملف</b><span>إجابتك: <b class="lat">' + esc(r.s) + '</b> · اعتمد على الدرس في حلك. ' + lessonLink + '</span></div>' : r ? '<div class="verdict ' + (r.ok ? 'ok' : 'ko') + '" role="status"><b>' + (r.ok ? '✓ إجابة صحيحة' : r.s ? '✗ إجابة غير صحيحة' : '— لم تُجب عن هذا السؤال') + '</b><span>' + (r.s ? 'إجابتك: <b class="lat">' + esc(r.s) + '</b> · ' : '') + 'الصحيح: <b class="lat">' + esc(q.ans) + '</b></span></div>' : '';
+  const verdict = r && open ? '<div class="verdict open" role="status"><b>📖 هذا السؤال بلا تصحيح في الملف</b><span>إجابتك: <b class="lat">' + esc(r.s) + '</b> · اعتمد على الدرس في حلك. ' + lessonLink + '</span></div>' : r ? '<div class="verdict ' + (r.ok ? 'ok' : 'ko') + '" role="status"><b>' + (r.ok ? '✓ إجابة صحيحة' : r.s ? '✗ إجابة غير صحيحة' : '— لم تُجب عن هذا السؤال') + '</b><span>' + (r.s ? 'إجابتك: <b class="lat">' + esc(ansLbl(r.s)) + '</b> · ' : '') + 'الصحيح: <b class="lat">' + esc(ansLbl(q.ans)) + '</b></span></div>' : '';
   const years = (open ? '<span class="yrs nokey">بدون تصحيح · اعتمد على الدرس</span>' : '') + (q.years && q.years.length ? '<span class="yrs">ظهر في: <b class="lat">' + q.years.join(' · ') + '</b>' + (q.years.length > 1 ? ' <em class="lat">×' + q.years.length + '</em>' : '') + '</span>' : (it.set.key === 'proposed' ? '<span class="yrs">سؤال مقترح</span>' : ''));
   const src = mode === 'practice' ? '' : '<a class="srcq" href="#/c/' + it.ch.id + '/q/' + it.set.key + '/' + (it.i + 1) + '" style="--c:var(--c' + it.ch.id + ')"><b class="lat">CH ' + cn(it.ch) + '</b> ' + KIND_AR[it.set.key] + ' · س<span class="lat">' + q.n + '</span></a>';
   const flagged = live && prog.exam.flag && prog.exam.flag[key];
@@ -1695,13 +1708,13 @@ function paintOpt(L, on) { $$('[data-opt="' + L + '"]').forEach((b) => { b.class
 function toggleOpt(L) {
   const c = CUR; if (!c) return;
   const key = c.keys[c.i], q = ITEMS[key].q;
-  if (q.opts.indexOf(L) < 0 || c.locked) return;
+  if ((q.opts.indexOf(L) < 0 && !(L === NONE && q.ans === NONE)) || c.locked) return;
   if (c.mode === 'exam') {
     const e = prog.exam; if (!e || examLeft() <= 0) return;
     const s = (e.ans[key] || '').split('').filter(Boolean); const j = s.indexOf(L);
-    if (j >= 0) s.splice(j, 1); else s.push(L);
+    if (j >= 0) s.splice(j, 1); else { if (L === NONE) s.length = 0; else { const z = s.indexOf(NONE); if (z >= 0) s.splice(z, 1); } s.push(L); }
     e.ans[key] = norm(s.join('')); e.t = now(); save();
-    paintOpt(L, j < 0);
+    $$('[data-opt]').forEach((b) => { const on = s.indexOf(b.dataset.opt) >= 0; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
     const chip = $('.qc.cur'); if (chip) chip.classList.toggle('ans', !!e.ans[key]);
     const a = e.keys.filter((k) => e.ans[k]).length; const scb = $('.exh .qscore span:nth-child(2) b'); if (scb) scb.textContent = a + '/' + e.keys.length;
     if (e.mode !== 'q') { const bar = $('.quiz .rbar i'); if (bar) bar.style.width = pct(a, e.keys.length) + '%'; }
@@ -1709,9 +1722,9 @@ function toggleOpt(L) {
   }
   if (c.result(key)) return;
   const s = quizSel[key] || []; const j = s.indexOf(L);
-  if (j >= 0) s.splice(j, 1); else s.push(L);
+  if (j >= 0) s.splice(j, 1); else { if (L === NONE) s.length = 0; else { const z = s.indexOf(NONE); if (z >= 0) s.splice(z, 1); } s.push(L); }
   quizSel[key] = s;
-  paintOpt(L, j < 0);
+  $$('[data-opt]').forEach((b) => { const on = s.indexOf(b.dataset.opt) >= 0; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
   const ck = $('[data-q="check"]'); if (ck) ck.disabled = !s.length;
 }
 function check() {
